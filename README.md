@@ -9,13 +9,13 @@ The proxy is written in Golang and packaged in a small and safe Alpine container
 ## Usage
 Use the docker container like below. It uses the [Github docker registry with signed docker containers](https://github.com/JamesCullum/multipart-upload-proxy/pkgs/container/multipart-upload-proxy). Use environmental variables to adjust settings. The container exposes port 6743 via HTTP.
 
-    docker run --rm -p 6743:6743 --name=multipart-upload-proxy gcr.io/jamescullum/multipart-upload-proxy:main
+    docker run --rm -p 6743:6743 --name=multipart-upload-proxy ghcr.io/jamescullum/multipart-upload-proxy:main
 
 In docker compose, you can use it like this (if you only want it to be exposed within the docker network).
 
       upload-proxy:
         container_name: upload_proxy
-        image: gcr.io/jamescullum/multipart-upload-proxy:main
+        image: ghcr.io/jamescullum/multipart-upload-proxy:main
         environment:
           - IMG_MAX_WIDTH=1920
           - IMG_MAX_HEIGHT=1080
