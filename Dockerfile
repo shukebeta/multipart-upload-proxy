@@ -3,9 +3,7 @@ FROM golang:1.19.4-alpine3.17 AS build
 WORKDIR /app
 
 # Install VIPS
-#RUN apt update && apt -y install libvips-dev
-RUN apk add --update --no-cache vips-dev
-RUN apk add --update --no-cache build-base
+RUN apk add --update --no-cache vips-dev build-base
 
 # Compile Go
 COPY go.mod ./

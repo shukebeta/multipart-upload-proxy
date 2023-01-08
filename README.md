@@ -7,15 +7,15 @@ This is where the multipart upload proxy comes into play. You can route all mult
 The proxy is written in Golang and packaged in a small and safe Alpine container. If you want to develop, run or compile the binary, please be aware that the image resizing uses the [bimg](https://github.com/h2non/bimg) library, which requires a linux vips environment. If you're in Windows, usage of WSL is highly recommended.
 
 ## Usage
-Use the docker container like below. Use an environmental variable to adjust it to your needs. The container exposes port 6743 via HTTP.
+Use the docker container like below. It uses the Github docker registry with signed docker containers. Use environmental variables to adjust settings. The container exposes port 6743 via HTTP.
 
-    docker run --rm -p 6743:6743 --name=multipart-upload-proxy containers.pkg.github.com/jamescullum/multipart-upload-proxy:latest
+    docker run --rm -p 6743:6743 --name=multipart-upload-proxy gcr.io/jamescullum/multipart-upload-proxy:latest
 
 In docker compose, you can use it like this (if you only want it to be exposed within the docker network).
 
       upload-proxy:
         container_name: upload_proxy
-        image: containers.pkg.github.com/jamescullum/multipart-upload-proxy:latest
+        image: gcr.io/jamescullum/multipart-upload-proxy:latest
         environment:
           - IMG_MAX_WIDTH=1920
           - IMG_MAX_HEIGHT=1080
