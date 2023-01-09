@@ -3,7 +3,7 @@ FROM golang:1.19.4-alpine3.17 AS build
 WORKDIR /app
 
 # Install VIPS
-RUN apk add --update --no-cache vips-dev build-base
+RUN apk add --update --no-cache vips-dev libwebp-dev libheif-dev build-base
 
 # Compile Go
 COPY go.mod ./
@@ -23,8 +23,8 @@ EXPOSE 6743
 
 COPY --from=build /proxy /proxy
 
-RUN apk add --update --no-cache vips-dev
-RUN addgroup nonroot && adduser --shell /sbin/nologin --disabled-password  --no-create-home --ingroup nonroot nonroot
+RUN apk add --update --no-cache vips-dev libwebp-dev libheif-dev  && \
+    addgroup nonroot && adduser --shell /sbin/nologin --disabled-password  --no-create-home --ingroup nonroot nonroot
 USER nonroot:nonroot
 
 ENTRYPOINT ["/proxy"]
