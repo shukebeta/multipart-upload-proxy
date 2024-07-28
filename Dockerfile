@@ -1,4 +1,4 @@
-FROM golang:1.19.4-alpine3.17 AS build
+FROM golang:1.22-alpine AS build
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ COPY *.go ./
 RUN go build -o /proxy proxy.go
 
 ## Deploy
-FROM alpine:3.17
+FROM alpine:3.20
 
 WORKDIR /
 
