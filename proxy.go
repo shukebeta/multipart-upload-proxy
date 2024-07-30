@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/http/httputil"
 	"net/textproto"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -92,7 +93,6 @@ func main() {
 	var defaultSettingsString = map[string]string{
 		FORWARD_DESTINATION: "https://httpbin.org/post",
 		FILE_UPLOAD_FIELD:   "assetData",
-		LISTEN_PATH:         "/upload",
 	}
 	for _, stringKey := range stringKeys {
 		settingsString[stringKey] = defaultSettingsString[stringKey]
@@ -110,8 +110,38 @@ func main() {
 		Timeout: time.Second * 10,
 	}
 
-	http.HandleFunc(settingsString[LISTEN_PATH], uploadFile)
+	http.HandleFunc("/", proxyHandler) // Hardcoded to / as we need to catch all requests and forward non upload ones
 	http.ListenAndServe(":6743", nil)
+}
+
+func proxyHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost && r.URL.Path == "/api/assets" { // Path is hardcoded as it's the Immich API value, could be made configurable
+		// Process POST request with assetData in the body
+		uploadFile(w, r)
+	} else {
+		// Forward the rest of requests
+		fmt.Println("Processing", r.Method, "request on", r.URL.Path)
+		forwardRequest(w, r)
+	}
+}
+
+func forwardRequest(w http.ResponseWriter, r *http.Request) {
+	parsedURL, _ := url.Parse(settingsString[FORWARD_DESTINATION])
+	baseURL := &url.URL{ // Get only the base URL to forward the whole request there
+		Scheme: parsedURL.Scheme,
+		Host:   parsedURL.Host,
+	}
+	fmt.Println(baseURL)
+	proxy := httputil.NewSingleHostReverseProxy(baseURL)
+
+	// Modify the request to set the correct host and scheme
+	r.URL.Host = baseURL.Host
+	r.URL.Scheme = baseURL.Scheme
+	r.Header.Set("X-Forwarded-Host", r.Header.Get("Host")) // Need to set it as forwarded host, otherwise the host header will be the proxy's host
+	r.Host = baseURL.Host
+
+	// Forward the request
+	proxy.ServeHTTP(w, r)
 }
 
 func uploadFile(w http.ResponseWriter, r *http.Request) {
@@ -126,7 +156,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	// Read and parse image
-	byteContainer, _ := ioutil.ReadAll(file)
+	byteContainer, _ := io.ReadAll(file)
 	oldImage := bimg.NewImage(byteContainer)
 	oldImageSize, err := oldImage.Size()
 	if err == nil {
