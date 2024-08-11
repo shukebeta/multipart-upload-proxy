@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -90,9 +89,9 @@ func main() {
 	// Integer64
 	settingsString = make(map[string]string)
 	var defaultSettingsString = map[string]string{
-		FORWARD_DESTINATION: "https://httpbin.org/post",
+		FORWARD_DESTINATION: "https://httpbin.org/anything",
 		FILE_UPLOAD_FIELD:   "assetData",
-		LISTEN_PATH:         "/upload",
+		LISTEN_PATH:         "/api/assets",
 	}
 	for _, stringKey := range stringKeys {
 		settingsString[stringKey] = defaultSettingsString[stringKey]
@@ -110,23 +109,61 @@ func main() {
 		Timeout: time.Second * 10,
 	}
 
-	http.HandleFunc(settingsString[LISTEN_PATH], uploadFile)
+	http.HandleFunc(settingsString[LISTEN_PATH], proxyHandler)
 	http.ListenAndServe(":6743", nil)
 }
 
-func uploadFile(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Incoming file upload")
+func proxyHandler(w http.ResponseWriter, r *http.Request) {
+	body := &bytes.Buffer{}
+	contentType := r.Header.Get("Content-Type")
 
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		fmt.Println("Incoming file upload")
+
+		var err error
+		contentType, body, err = reformatMultipart(w, r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else {
+		byteBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		body = bytes.NewBuffer(byteBody)
+	}
+
+	// Forward request
+	proxyReq, _ := http.NewRequest(r.Method, settingsString[FORWARD_DESTINATION], body)
+	copyHeader(proxyReq.Header, r.Header)
+	proxyReq.Header.Set("Content-Length", strconv.Itoa(body.Len()))
+	proxyReq.Header.Set("Content-Type", contentType)
+
+	proxyResp, err := client.Do(proxyReq)
+	if err != nil {
+		fmt.Println("ProxyResp Error:", err)
+		http.Error(w, err.Error(), http.StatusFailedDependency)
+		return
+	}
+
+	// Send result back
+	copyHeader(w.Header(), proxyResp.Header)
+	w.WriteHeader(proxyResp.StatusCode)
+	io.Copy(w, proxyResp.Body)
+}
+
+func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.Buffer, error) {
 	r.ParseMultipartForm(settingsInt64[UPLOAD_MAX_SIZE])
 	file, handler, err := r.FormFile(settingsString[FILE_UPLOAD_FIELD])
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return "", nil, err
 	}
 	defer file.Close()
 
 	// Read and parse image
-	byteContainer, _ := ioutil.ReadAll(file)
+	byteContainer, _ := io.ReadAll(file)
 	oldImage := bimg.NewImage(byteContainer)
 	oldImageSize, err := oldImage.Size()
 	if err == nil {
@@ -168,11 +205,12 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	writer := multipart.NewWriter(body)
 	for formKey := range r.Form {
 		formValue := r.Form.Get(formKey)
-		fmt.Println(formKey, " => ", formValue)
+		// fmt.Println(formKey, " => ", formValue)
 
 		fw, _ := writer.CreateFormField(formKey)
 		io.Copy(fw, strings.NewReader(formValue))
 	}
+
 	// Add new file
 	mimeType := handler.Header.Get("Content-Type")
 	if mimeType == "" || mimeType == "application/octet-stream" {
@@ -187,23 +225,9 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	io.Copy(fw, bytes.NewReader(byteContainer))
 	writer.Close()
 
-	// Forward request
-	proxyReq, _ := http.NewRequest(r.Method, settingsString[FORWARD_DESTINATION], body)
-	copyHeader(proxyReq.Header, r.Header)
-	proxyReq.Header.Set("Content-Length", strconv.Itoa(body.Len()))
-	proxyReq.Header.Set("Content-Type", writer.FormDataContentType())
+	contentType := writer.FormDataContentType()
 
-	proxyResp, err := client.Do(proxyReq)
-	if err != nil {
-		fmt.Println("ProxyResp Error:", err)
-		http.Error(w, err.Error(), http.StatusFailedDependency)
-		return
-	}
-
-	// Send result back
-	copyHeader(w.Header(), proxyResp.Header)
-	w.WriteHeader(proxyResp.StatusCode)
-	io.Copy(w, proxyResp.Body)
+	return contentType, body, nil
 }
 
 var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
