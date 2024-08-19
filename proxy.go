@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"io"
+	"log"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -63,7 +63,7 @@ func main() {
 			}
 		}
 
-		fmt.Println(intKey+": ", settingsInt[intKey])
+		log.Println(intKey+": ", settingsInt[intKey])
 	}
 
 	// Integer64
@@ -83,7 +83,7 @@ func main() {
 			}
 		}
 
-		fmt.Println(int64Key+": ", settingsInt64[int64Key])
+		log.Println(int64Key+": ", settingsInt64[int64Key])
 	}
 
 	// Integer64
@@ -101,7 +101,7 @@ func main() {
 			settingsString[stringKey] = envValue
 		}
 
-		fmt.Println(stringKey+": ", settingsString[stringKey])
+		log.Println(stringKey+": ", settingsString[stringKey])
 	}
 
 	// Other
@@ -110,6 +110,9 @@ func main() {
 	}
 
 	http.HandleFunc(settingsString[LISTEN_PATH], proxyHandler)
+	if settingsString[LISTEN_PATH] != "/" {
+		http.HandleFunc("/", proxyHandler)
+	}
 	http.ListenAndServe(":6743", nil)
 }
 
@@ -118,7 +121,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-		fmt.Println("Incoming file upload")
+		log.Println("Incoming file upload")
 
 		var err error
 		contentType, body, err = reformatMultipart(w, r)
@@ -141,9 +144,14 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	proxyReq.Header.Set("Content-Length", strconv.Itoa(body.Len()))
 	proxyReq.Header.Set("Content-Type", contentType)
 
+	if r.URL.Path != settingsString[LISTEN_PATH] {
+		log.Println("Request hit proxy but not the intended path, proxying to copied path")
+		proxyReq.URL.Path = r.URL.Path
+	}
+
 	proxyResp, err := client.Do(proxyReq)
 	if err != nil {
-		fmt.Println("ProxyResp Error:", err)
+		log.Println("ProxyResp Error:", err)
 		http.Error(w, err.Error(), http.StatusFailedDependency)
 		return
 	}
@@ -169,7 +177,7 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 	if err == nil {
 		oldImagePX, oldImageAspect := int64(oldImageSize.Width*oldImageSize.Height), float64(oldImageSize.Width)/float64(oldImageSize.Height)
 		if oldImagePX > settingsInt64[IMG_MAX_PIXELS] {
-			fmt.Println("Conversion needed")
+			log.Println("Conversion needed")
 
 			var newWidth int
 			var newHeight int
@@ -184,20 +192,20 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 			newByteContainer, err := oldImage.Resize(newWidth, newHeight)
 			if err == nil {
 				if len(byteContainer) > len(newByteContainer) {
-					fmt.Println("Resizing saved space, so we're taking that")
+					log.Println("Resizing saved space, so we're taking that")
 					byteContainer = newByteContainer
 				} else {
-					fmt.Println("After conversion, original file is smaller - therefore keeping the original")
+					log.Println("After conversion, original file is smaller - therefore keeping the original")
 				}
 
 			} else if err != nil {
-				fmt.Println("Resize Error:", err)
+				log.Println("Resize Error:", err)
 			}
 		} else {
-			fmt.Println("Conversion not needed")
+			log.Println("Conversion not needed")
 		}
 	} else {
-		fmt.Println("Size() Error:", err)
+		log.Println("Size() Error:", err)
 	}
 
 	// Copy form values
@@ -238,9 +246,7 @@ func escapeQuotes(s string) string {
 
 func CreateFormFileWithMime(w *multipart.Writer, fieldname, filename, mimeType string) (io.Writer, error) {
 	h := make(textproto.MIMEHeader)
-	h.Set("Content-Disposition",
-		fmt.Sprintf(`form-data; name="%s"; filename="%s"`,
-			escapeQuotes(fieldname), escapeQuotes(filename)))
+	h.Set("Content-Disposition", `form-data; name="`+escapeQuotes(fieldname)+`"; filename="`+escapeQuotes(filename)+`"`)
 	h.Set("Content-Type", mimeType)
 	return w.CreatePart(h)
 }
