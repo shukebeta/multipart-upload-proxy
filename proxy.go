@@ -147,6 +147,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != settingsString[LISTEN_PATH] {
 		log.Println("Request hit proxy but not the intended path, proxying to copied path")
 		proxyReq.URL.Path = r.URL.Path
+		proxyReq.URL.RawQuery = r.URL.RawQuery
 	}
 
 	proxyResp, err := client.Do(proxyReq)
