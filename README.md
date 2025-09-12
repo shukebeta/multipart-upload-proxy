@@ -1,6 +1,6 @@
 # Multipart Upload Proxy (Golang)
 
-There are many tools to help you resize images when fetching resources from your online storage. However, sometimes you want to resize large images during an upload automatically instead. Especially if you don't have control over the software that is supposed to process the uploaded image, for example because it's open source and the [contributors don't think resizing should be a feature](https://github.com/immich-app/immich/pull/1242), getting the feature into the existing code base can be difficult. 
+There are many tools to help you resize images when fetching resources from your online storage. However, sometimes you want to resize large images during an upload automatically instead. Especially if you don't have control over the software that is supposed to process the uploaded image, for example because it's open source and the [contributors don't think resizing should be a feature](https://github.com/immich-app/immich/pull/1242), getting the feature into the existing code base can be difficult.
 
 This is where the multipart upload proxy comes into play. You can route all multipart file uploads to the proxy and it will digest and resize images to the size you want, finally relaying the same payload with all headers and just a compressed file to the endpoint that saves the file.
 
@@ -30,9 +30,10 @@ If you use existing software, it might be needed to intercept incoming connectio
 ## Environment variables
 
 |Variable name                          |Default                         | Comment
-|-------------------------------|-----------------------------| -----------------------------| 
+|-------------------------------|-----------------------------| -----------------------------|
 |`IMG_MAX_WIDTH`            |1920            | Pixels, keeps aspect ratio
 |`IMG_MAX_HEIGHT`            |1080            | Pixels, keeps aspect ratio
+|`JPEG_QUALITY`|75|JPEG compression quality (1-100, lower = smaller file)
 |`UPLOAD_MAX_SIZE`|104857600|Maximum form size in bytes
 |`IMG_MAX_PIXELS`|2073600|If the images width*height (in pixels) doesn't exceed this value, don't resize
 |`FORWARD_DESTINATION`|https://httpbin.org/post|Where should the result be sent to

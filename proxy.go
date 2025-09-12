@@ -20,8 +20,9 @@ import (
 // Settings / Environment Variables
 const IMG_MAX_WIDTH = "IMG_MAX_WIDTH"
 const IMG_MAX_HEIGHT = "IMG_MAX_HEIGHT"
+const JPEG_QUALITY = "JPEG_QUALITY"
 
-var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT}
+var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, JPEG_QUALITY}
 var settingsInt map[string]int
 
 const UPLOAD_MAX_SIZE = "UPLOAD_MAX_SIZE"
@@ -50,8 +51,9 @@ func main() {
 	var defaultSettingsInt = map[string]int{
 		IMG_MAX_WIDTH:  1920,
 		IMG_MAX_HEIGHT: 1080,
+		JPEG_QUALITY:   75,
 	}
-	var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT}
+	var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, JPEG_QUALITY}
 	for _, intKey := range intKeys {
 		settingsInt[intKey] = defaultSettingsInt[intKey]
 
@@ -190,7 +192,12 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 				newWidth = int(float64(settingsInt[IMG_MAX_HEIGHT]) * oldImageAspect)
 			}
 
-			newByteContainer, err := oldImage.Resize(newWidth, newHeight)
+			options := bimg.Options{
+				Width:   newWidth,
+				Height:  newHeight,
+				Quality: settingsInt[JPEG_QUALITY],
+			}
+			newByteContainer, err := oldImage.Process(options)
 			if err == nil {
 				if len(byteContainer) > len(newByteContainer) {
 					log.Println("Resizing saved space, so we're taking that")
