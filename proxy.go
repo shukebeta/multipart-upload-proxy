@@ -178,39 +178,49 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 	oldImage := bimg.NewImage(byteContainer)
 	oldImageSize, err := oldImage.Size()
 	if err == nil {
-		oldImagePX, oldImageAspect := int64(oldImageSize.Width*oldImageSize.Height), float64(oldImageSize.Width)/float64(oldImageSize.Height)
-		if oldImagePX > settingsInt64[IMG_MAX_PIXELS] {
-			log.Println("Conversion needed")
+		// Check if image exceeds size limits
+		needsResize := oldImageSize.Width > settingsInt[IMG_MAX_WIDTH] || oldImageSize.Height > settingsInt[IMG_MAX_HEIGHT]
+		
+		var newWidth, newHeight int
+		if needsResize {
+			log.Println("Resizing needed - image exceeds limits")
+			
+			// Calculate scale factors for both dimensions
+			scaleWidth := float64(settingsInt[IMG_MAX_WIDTH]) / float64(oldImageSize.Width)
+			scaleHeight := float64(settingsInt[IMG_MAX_HEIGHT]) / float64(oldImageSize.Height)
+			
+			// Use the smaller scale factor to ensure both dimensions fit
+			scale := scaleWidth
+			if scaleHeight < scaleWidth {
+				scale = scaleHeight
+			}
+			
+			newWidth = int(float64(oldImageSize.Width) * scale)
+			newHeight = int(float64(oldImageSize.Height) * scale)
+		} else {
+			log.Println("No resizing needed - keeping original dimensions")
+			newWidth = oldImageSize.Width
+			newHeight = oldImageSize.Height
+		}
 
-			var newWidth int
-			var newHeight int
-			if oldImageAspect >= 1 {
-				newWidth = settingsInt[IMG_MAX_WIDTH]
-				newHeight = int(float64(settingsInt[IMG_MAX_WIDTH]) * oldImageAspect)
+		// Always process the image (for format conversion and quality compression)
+		options := bimg.Options{
+			Width:   newWidth,
+			Height:  newHeight,
+			Quality: settingsInt[JPEG_QUALITY],
+			Type:    bimg.JPEG,
+		}
+		
+		newByteContainer, err := oldImage.Process(options)
+		if err == nil {
+			if len(byteContainer) > len(newByteContainer) {
+				log.Println("Processing saved space, so we're taking that")
+				byteContainer = newByteContainer
 			} else {
-				newHeight = settingsInt[IMG_MAX_HEIGHT]
-				newWidth = int(float64(settingsInt[IMG_MAX_HEIGHT]) * oldImageAspect)
-			}
-
-			options := bimg.Options{
-				Width:   newWidth,
-				Height:  newHeight,
-				Quality: settingsInt[JPEG_QUALITY],
-			}
-			newByteContainer, err := oldImage.Process(options)
-			if err == nil {
-				if len(byteContainer) > len(newByteContainer) {
-					log.Println("Resizing saved space, so we're taking that")
-					byteContainer = newByteContainer
-				} else {
-					log.Println("After conversion, original file is smaller - therefore keeping the original")
-				}
-
-			} else if err != nil {
-				log.Println("Resize Error:", err)
+				log.Println("After processing, original file is smaller - therefore keeping the original")
 			}
 		} else {
-			log.Println("Conversion not needed")
+			log.Println("Processing error:", err)
 		}
 	} else {
 		log.Println("Size() Error:", err)
