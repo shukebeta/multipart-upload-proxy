@@ -164,19 +164,19 @@ func TestBackwardCompatibility(t *testing.T) {
 func TestImageProcessingWithQuality(t *testing.T) {
 	setupTestEnvironment()
 
-	// Load the test image file once
-	originalJPEG, err := bimg.Read("Norway.jpeg")
+	// Load the PNG test image file to test format conversion
+	originalImage, err := bimg.Read("HappyNotes.png")
 	if err != nil {
-		t.Fatalf("Failed to load test image Norway.jpeg: %v", err)
+		t.Fatalf("Failed to load test image HappyNotes.png: %v", err)
 	}
 
-	oldImage := bimg.NewImage(originalJPEG)
+	oldImage := bimg.NewImage(originalImage)
 	oldImageSize, err := oldImage.Size()
 	if err != nil {
 		t.Fatalf("Failed to get image size: %v", err)
 	}
 
-	t.Logf("Original image: %dx%d, %d bytes", oldImageSize.Width, oldImageSize.Height, len(originalJPEG))
+	t.Logf("Original image: %dx%d, %d bytes", oldImageSize.Width, oldImageSize.Height, len(originalImage))
 
 	// Test different quality levels
 	testCases := []struct {
