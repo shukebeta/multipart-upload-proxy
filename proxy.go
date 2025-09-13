@@ -179,16 +179,26 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 	byteContainer, _ := io.ReadAll(file)
 	oldImage := bimg.NewImage(byteContainer)
 	
-	// Auto-rotate based on EXIF orientation before getting size
+	// Check if image has EXIF orientation data that needs correction
 	var workingImage *bimg.Image
-	rotatedImage, err := oldImage.AutoRotate()
-	if err != nil {
-		// If auto-rotate fails, use original image
-		log.Println("AutoRotate failed, using original orientation:", err)
-		workingImage = oldImage
+	
+	// Get EXIF orientation (this is fast, just metadata reading)
+	metadata, err := oldImage.Metadata()
+	needsRotation := err == nil && metadata.Orientation > 1
+	
+	if needsRotation {
+		// Only do expensive AutoRotate when actually needed
+		log.Println("EXIF orientation detected, applying rotation")
+		rotatedImage, err := oldImage.AutoRotate()
+		if err != nil {
+			log.Println("AutoRotate failed, using original orientation:", err)
+			workingImage = oldImage
+		} else {
+			workingImage = bimg.NewImage(rotatedImage)
+		}
 	} else {
-		// Use the properly oriented image
-		workingImage = bimg.NewImage(rotatedImage)
+		// No rotation needed, use original image directly (fast path)
+		workingImage = oldImage
 	}
 	
 	// Get size from properly oriented image
