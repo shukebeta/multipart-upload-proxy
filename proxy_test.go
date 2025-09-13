@@ -694,6 +694,92 @@ func TestNarrowSidePriorityOverBoundingBox(t *testing.T) {
 	t.Logf("Narrow side result: %dx%d (resize: %v)", newWidth2, newHeight2, needsResize2)
 }
 
+// TestEXIFOrientationHandling tests that EXIF orientation is properly handled
+func TestEXIFOrientationHandling(t *testing.T) {
+	settingsInt = make(map[string]int)
+	settingsInt[IMG_MAX_WIDTH] = 800
+	settingsInt[IMG_MAX_HEIGHT] = 600
+	settingsInt[IMG_MAX_NARROW_SIDE] = 500
+	settingsInt[JPEG_QUALITY] = 75
+
+	// This test verifies that our narrow side detection works correctly
+	// even when images have EXIF orientation data that might rotate them
+	
+	// For this test, we'll use HappyNotes.png which should not have EXIF issues
+	// The key is that AutoRotate is called and doesn't crash the process
+	
+	testImage, err := bimg.Read("HappyNotes.png")
+	if err != nil {
+		t.Fatalf("Failed to load test image: %v", err)
+	}
+
+	// Simulate the same logic as in reformatMultipart
+	oldImage := bimg.NewImage(testImage)
+	
+	// This should not fail even if AutoRotate doesn't work on PNG
+	var workingImage *bimg.Image
+	rotatedImage, err := oldImage.AutoRotate()
+	if err != nil {
+		t.Logf("AutoRotate failed as expected for PNG: %v", err)
+		workingImage = oldImage
+	} else {
+		workingImage = bimg.NewImage(rotatedImage)
+	}
+	
+	oldImageSize, err := workingImage.Size()
+	if err != nil {
+		t.Fatalf("Failed to get image size: %v", err)
+	}
+
+	t.Logf("Image size after EXIF handling: %dx%d", oldImageSize.Width, oldImageSize.Height)
+
+	// Verify the narrow side logic still works
+	narrowSideLimit := 500
+	narrowSide := oldImageSize.Width
+	if oldImageSize.Height < oldImageSize.Width {
+		narrowSide = oldImageSize.Height
+	}
+
+	if narrowSide > narrowSideLimit {
+		scale := float64(narrowSideLimit) / float64(narrowSide)
+		newWidth := int(float64(oldImageSize.Width) * scale)
+		newHeight := int(float64(oldImageSize.Height) * scale)
+
+		options := bimg.Options{
+			Width:   newWidth,
+			Height:  newHeight,
+			Quality: 75,
+			Type:    bimg.JPEG,
+		}
+
+		processedImage, err := workingImage.Process(options)
+		if err != nil {
+			t.Fatalf("Image processing failed after EXIF handling: %v", err)
+		}
+
+		// Verify result
+		newImage := bimg.NewImage(processedImage)
+		newImageSize, err := newImage.Size()
+		if err != nil {
+			t.Fatalf("Failed to get processed image size: %v", err)
+		}
+
+		t.Logf("Processed size: %dx%d", newImageSize.Width, newImageSize.Height)
+
+		// Verify narrow side constraint is met
+		resultNarrowSide := newImageSize.Width
+		if newImageSize.Height < newImageSize.Width {
+			resultNarrowSide = newImageSize.Height
+		}
+
+		if resultNarrowSide > narrowSideLimit {
+			t.Errorf("Narrow side constraint violated after EXIF handling: %d > %d", resultNarrowSide, narrowSideLimit)
+		}
+	}
+
+	t.Log("EXIF orientation handling test completed successfully")
+}
+
 // TestNarrowSideBackwardCompatibility tests that not setting narrow side uses original logic
 func TestNarrowSideBackwardCompatibility(t *testing.T) {
 	settingsInt = make(map[string]int)

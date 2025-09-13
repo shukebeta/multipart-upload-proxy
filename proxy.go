@@ -178,7 +178,21 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 	// Read and parse image
 	byteContainer, _ := io.ReadAll(file)
 	oldImage := bimg.NewImage(byteContainer)
-	oldImageSize, err := oldImage.Size()
+	
+	// Auto-rotate based on EXIF orientation before getting size
+	var workingImage *bimg.Image
+	rotatedImage, err := oldImage.AutoRotate()
+	if err != nil {
+		// If auto-rotate fails, use original image
+		log.Println("AutoRotate failed, using original orientation:", err)
+		workingImage = oldImage
+	} else {
+		// Use the properly oriented image
+		workingImage = bimg.NewImage(rotatedImage)
+	}
+	
+	// Get size from properly oriented image
+	oldImageSize, err := workingImage.Size()
 	if err == nil {
 		var newWidth, newHeight int
 		var needsResize bool
@@ -241,7 +255,7 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 			Type:    bimg.JPEG,
 		}
 		
-		newByteContainer, err := oldImage.Process(options)
+		newByteContainer, err := workingImage.Process(options)
 		if err == nil {
 			if len(byteContainer) > len(newByteContainer) {
 				log.Println("Processing saved space, so we're taking that")
