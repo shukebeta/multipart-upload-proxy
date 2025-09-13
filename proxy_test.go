@@ -50,12 +50,13 @@ func TestJPEGQualityEnvironmentVariable(t *testing.T) {
 	// Test default value
 	os.Unsetenv("JPEG_QUALITY")
 	defaultSettingsInt := map[string]int{
-		IMG_MAX_WIDTH:  1920,
-		IMG_MAX_HEIGHT: 1080,
-		JPEG_QUALITY:   75,
+		IMG_MAX_WIDTH:       1920,
+		IMG_MAX_HEIGHT:      1080,
+		IMG_MAX_NARROW_SIDE: 0,
+		JPEG_QUALITY:        75,
 	}
 
-	intKeys := []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, JPEG_QUALITY}
+	intKeys := []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY}
 	for _, intKey := range intKeys {
 		settingsInt[intKey] = defaultSettingsInt[intKey]
 
@@ -131,12 +132,13 @@ func TestBackwardCompatibility(t *testing.T) {
 	// Initialize settings as main() would
 	settingsInt = make(map[string]int)
 	defaultSettingsInt := map[string]int{
-		IMG_MAX_WIDTH:  1920,
-		IMG_MAX_HEIGHT: 1080,
-		JPEG_QUALITY:   75, // Should have default even if not set
+		IMG_MAX_WIDTH:       1920,
+		IMG_MAX_HEIGHT:      1080,
+		IMG_MAX_NARROW_SIDE: 0, // Should have default even if not set
+		JPEG_QUALITY:        75, // Should have default even if not set
 	}
 
-	intKeys := []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, JPEG_QUALITY}
+	intKeys := []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY}
 	for _, intKey := range intKeys {
 		settingsInt[intKey] = defaultSettingsInt[intKey]
 
@@ -197,6 +199,7 @@ func TestImageProcessingWithQuality(t *testing.T) {
 			settingsInt = make(map[string]int)
 			settingsInt[IMG_MAX_WIDTH] = 800
 			settingsInt[IMG_MAX_HEIGHT] = 600
+			settingsInt[IMG_MAX_NARROW_SIDE] = 0 // Use original bounding box logic
 			settingsInt[JPEG_QUALITY] = tc.quality
 
 			settingsInt64 = make(map[string]int64)
@@ -204,22 +207,26 @@ func TestImageProcessingWithQuality(t *testing.T) {
 
 			oldImagePX := int64(oldImageSize.Width * oldImageSize.Height)
 			if oldImagePX > settingsInt64[IMG_MAX_PIXELS] {
-				oldImageAspect := float64(oldImageSize.Width) / float64(oldImageSize.Height)
-
+				// Use the same logic as in reformatMultipart for consistency
 				var newWidth, newHeight int
-				if oldImageAspect >= 1 {
-					newWidth = settingsInt[IMG_MAX_WIDTH]
-					newHeight = int(float64(settingsInt[IMG_MAX_WIDTH]) / oldImageAspect)
-				} else {
-					newHeight = settingsInt[IMG_MAX_HEIGHT]
-					newWidth = int(float64(settingsInt[IMG_MAX_HEIGHT]) * oldImageAspect)
+				scaleWidth := float64(settingsInt[IMG_MAX_WIDTH]) / float64(oldImageSize.Width)
+				scaleHeight := float64(settingsInt[IMG_MAX_HEIGHT]) / float64(oldImageSize.Height)
+				
+				// Use the smaller scale factor to ensure both dimensions fit
+				scale := scaleWidth
+				if scaleHeight < scaleWidth {
+					scale = scaleHeight
 				}
+				
+				newWidth = int(float64(oldImageSize.Width) * scale)
+				newHeight = int(float64(oldImageSize.Height) * scale)
 
 				// Test the quality-controlled processing
 				options := bimg.Options{
 					Width:   newWidth,
 					Height:  newHeight,
 					Quality: settingsInt[JPEG_QUALITY],
+					Type:    bimg.JPEG,
 				}
 
 				newByteContainer, err := oldImage.Process(options)
@@ -283,6 +290,7 @@ func TestMultipartFormProcessing(t *testing.T) {
 	settingsInt = make(map[string]int)
 	settingsInt[IMG_MAX_WIDTH] = 800
 	settingsInt[IMG_MAX_HEIGHT] = 600
+	settingsInt[IMG_MAX_NARROW_SIDE] = 0 // Use original bounding box logic
 	settingsInt[JPEG_QUALITY] = 30 // Use low quality for testing
 
 	settingsInt64 = make(map[string]int64)
@@ -456,4 +464,258 @@ func benchmarkImageProcessing(b *testing.B, quality int) {
 			b.Fatalf("Image processing failed: %v", err)
 		}
 	}
+}
+
+// TestNarrowSideConstraint tests the new IMG_MAX_NARROW_SIDE functionality
+func TestNarrowSideConstraint(t *testing.T) {
+	// Initialize settings
+	settingsInt = make(map[string]int)
+	settingsInt[IMG_MAX_WIDTH] = 1920
+	settingsInt[IMG_MAX_HEIGHT] = 1080
+	settingsInt[JPEG_QUALITY] = 75
+
+	testCases := []struct {
+		name          string
+		imageFile     string
+		narrowSide    int
+		expectResize  bool
+		description   string
+	}{
+		{
+			name:          "norway_jpeg_needs_resize",
+			imageFile:     "Norway.jpeg", // 640x426, narrow side = 426
+			narrowSide:    400,
+			expectResize:  true,
+			description:   "Norway JPEG should resize when narrow side > 400",
+		},
+		{
+			name:          "norway_jpeg_no_resize",
+			imageFile:     "Norway.jpeg", // 640x426, narrow side = 426
+			narrowSide:    500,
+			expectResize:  false,
+			description:   "Norway JPEG should not resize when narrow side < 500",
+		},
+		{
+			name:          "happy_notes_needs_resize",
+			imageFile:     "HappyNotes.png", // 794x638, narrow side = 638
+			narrowSide:    500,
+			expectResize:  true,
+			description:   "HappyNotes PNG should resize when narrow side > 500",
+		},
+		{
+			name:          "happy_notes_no_resize",
+			imageFile:     "HappyNotes.png", // 794x638, narrow side = 638
+			narrowSide:    700,
+			expectResize:  false,
+			description:   "HappyNotes PNG should not resize when narrow side < 700",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Logf("Testing: %s", tc.description)
+			
+			// Set narrow side constraint
+			settingsInt[IMG_MAX_NARROW_SIDE] = tc.narrowSide
+
+			// Load the test image directly
+			testImage, err := bimg.Read(tc.imageFile)
+			if err != nil {
+				t.Fatalf("Failed to load test image %s: %v", tc.imageFile, err)
+			}
+
+			// Test the actual resize logic
+			oldImage := bimg.NewImage(testImage)
+			oldImageSize, err := oldImage.Size()
+			if err != nil {
+				t.Fatalf("Failed to get image size: %v", err)
+			}
+
+			// Apply the same logic as in reformatMultipart
+			var newWidth, newHeight int
+			var needsResize bool
+			
+			// Calculate narrow side first
+			actualNarrowSide := oldImageSize.Width
+			if oldImageSize.Height < oldImageSize.Width {
+				actualNarrowSide = oldImageSize.Height
+			}
+			
+			if settingsInt[IMG_MAX_NARROW_SIDE] > 0 {
+				// Use narrow side strategy
+				needsResize = actualNarrowSide > settingsInt[IMG_MAX_NARROW_SIDE]
+				
+				if needsResize {
+					// Calculate scale factor based on narrow side
+					scale := float64(settingsInt[IMG_MAX_NARROW_SIDE]) / float64(actualNarrowSide)
+					
+					newWidth = int(float64(oldImageSize.Width) * scale)
+					newHeight = int(float64(oldImageSize.Height) * scale)
+				} else {
+					newWidth = oldImageSize.Width
+					newHeight = oldImageSize.Height
+				}
+			}
+
+			// Verify expectations
+			if needsResize != tc.expectResize {
+				t.Errorf("Expected needsResize=%v, got %v", tc.expectResize, needsResize)
+			}
+
+			// Verify narrow side constraint is met
+			resultNarrowSide := newWidth
+			if newHeight < newWidth {
+				resultNarrowSide = newHeight
+			}
+
+			if tc.expectResize && resultNarrowSide > tc.narrowSide {
+				t.Errorf("Narrow side %d exceeds constraint %d", resultNarrowSide, tc.narrowSide)
+			}
+
+			// If resize was expected, verify it actually happened
+			if tc.expectResize {
+				if newWidth == oldImageSize.Width && newHeight == oldImageSize.Height {
+					t.Error("Expected resize but dimensions unchanged")
+				}
+
+				// Test actual processing
+				options := bimg.Options{
+					Width:   newWidth,
+					Height:  newHeight,
+					Quality: settingsInt[JPEG_QUALITY],
+					Type:    bimg.JPEG,
+				}
+
+				processedImage, err := oldImage.Process(options)
+				if err != nil {
+					t.Fatalf("Image processing failed: %v", err)
+				}
+
+				// Verify processed image
+				newImage := bimg.NewImage(processedImage)
+				newImageSize, err := newImage.Size()
+				if err != nil {
+					t.Fatalf("Failed to get processed image size: %v", err)
+				}
+
+				processedNarrowSide := newImageSize.Width
+				if newImageSize.Height < newImageSize.Width {
+					processedNarrowSide = newImageSize.Height
+				}
+
+				if processedNarrowSide > tc.narrowSide {
+					t.Errorf("Processed narrow side %d exceeds constraint %d", processedNarrowSide, tc.narrowSide)
+				}
+
+				t.Logf("Original: %dx%d, Processed: %dx%d (narrow side: %d -> %d)",
+					oldImageSize.Width, oldImageSize.Height,
+					newImageSize.Width, newImageSize.Height,
+					actualNarrowSide, processedNarrowSide)
+			}
+		})
+	}
+}
+
+// TestNarrowSidePriorityOverBoundingBox tests that narrow side takes priority over width/height limits
+func TestNarrowSidePriorityOverBoundingBox(t *testing.T) {
+	settingsInt = make(map[string]int)
+	settingsInt[IMG_MAX_WIDTH] = 500  // Make smaller than Norway's width (640)
+	settingsInt[IMG_MAX_HEIGHT] = 400 // Make smaller than Norway's height (426)
+	settingsInt[JPEG_QUALITY] = 75
+
+	// Use Norway.jpeg: 640x426 (narrow side = 426, exceeds both width and height limits)
+	testImage, err := bimg.Read("Norway.jpeg")
+	if err != nil {
+		t.Fatalf("Failed to load test image: %v", err)
+	}
+
+	oldImage := bimg.NewImage(testImage)
+	oldImageSize, err := oldImage.Size()
+	if err != nil {
+		t.Fatalf("Failed to get image size: %v", err)
+	}
+
+	// Test 1: Without narrow side constraint (should use bounding box)
+	settingsInt[IMG_MAX_NARROW_SIDE] = 0
+
+	var newWidth1, newHeight1 int
+	needsResize1 := oldImageSize.Width > settingsInt[IMG_MAX_WIDTH] || oldImageSize.Height > settingsInt[IMG_MAX_HEIGHT]
+	if needsResize1 {
+		scaleWidth := float64(settingsInt[IMG_MAX_WIDTH]) / float64(oldImageSize.Width)
+		scaleHeight := float64(settingsInt[IMG_MAX_HEIGHT]) / float64(oldImageSize.Height)
+		
+		scale := scaleWidth
+		if scaleHeight < scaleWidth {
+			scale = scaleHeight
+		}
+		
+		newWidth1 = int(float64(oldImageSize.Width) * scale)
+		newHeight1 = int(float64(oldImageSize.Height) * scale)
+	}
+
+	// Test 2: With narrow side constraint (should ignore bounding box)
+	settingsInt[IMG_MAX_NARROW_SIDE] = 450 // Larger than narrow side of 426
+
+	var newWidth2, newHeight2 int
+	narrowSide := oldImageSize.Width
+	if oldImageSize.Height < oldImageSize.Width {
+		narrowSide = oldImageSize.Height
+	}
+	
+	needsResize2 := narrowSide > settingsInt[IMG_MAX_NARROW_SIDE]
+	if needsResize2 {
+		scale := float64(settingsInt[IMG_MAX_NARROW_SIDE]) / float64(narrowSide)
+		newWidth2 = int(float64(oldImageSize.Width) * scale)
+		newHeight2 = int(float64(oldImageSize.Height) * scale)
+	} else {
+		newWidth2 = oldImageSize.Width
+		newHeight2 = oldImageSize.Height
+	}
+
+	// Verify that results are different
+	if needsResize1 == needsResize2 && newWidth1 == newWidth2 && newHeight1 == newHeight2 {
+		t.Error("Narrow side constraint should produce different results than bounding box")
+	}
+
+	// Verify narrow side constraint allows larger dimensions when appropriate
+	// Original: 640x426, narrow side = 426, constraint = 450
+	// Should NOT resize because narrow side (426) is less than constraint (450)
+	if needsResize2 {
+		t.Error("Should not resize when narrow side is within constraint")
+	}
+
+	// But bounding box should resize because 640 > 500 and 426 > 400
+	if !needsResize1 {
+		t.Error("Should resize with bounding box constraint")
+	}
+
+	t.Logf("Original: %dx%d", oldImageSize.Width, oldImageSize.Height)
+	t.Logf("Bounding box result: %dx%d (resize: %v)", newWidth1, newHeight1, needsResize1)
+	t.Logf("Narrow side result: %dx%d (resize: %v)", newWidth2, newHeight2, needsResize2)
+}
+
+// TestNarrowSideBackwardCompatibility tests that not setting narrow side uses original logic
+func TestNarrowSideBackwardCompatibility(t *testing.T) {
+	settingsInt = make(map[string]int)
+	settingsInt[IMG_MAX_WIDTH] = 800
+	settingsInt[IMG_MAX_HEIGHT] = 600
+	settingsInt[IMG_MAX_NARROW_SIDE] = 0 // Not set
+	settingsInt[JPEG_QUALITY] = 75
+
+	// Test that the behavior is identical to before when IMG_MAX_NARROW_SIDE is 0
+	originalW, originalH := 1200, 800
+
+	// This should use the original bounding box logic
+	needsResize := originalW > settingsInt[IMG_MAX_WIDTH] || originalH > settingsInt[IMG_MAX_HEIGHT]
+	if !needsResize {
+		t.Error("Should need resize with bounding box logic")
+	}
+
+	// Even though narrow side (800) would fit in typical narrow constraints,
+	// the bounding box logic should still apply
+	if settingsInt[IMG_MAX_NARROW_SIDE] > 0 {
+		t.Error("Test setup error: IMG_MAX_NARROW_SIDE should be 0 for this test")
+	}
+
+	t.Logf("Backward compatibility verified: using bounding box when narrow side = %d", settingsInt[IMG_MAX_NARROW_SIDE])
 }

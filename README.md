@@ -27,12 +27,27 @@ In docker compose, you can use it like this (if you only want it to be exposed w
 If you use existing software, it might be needed to intercept incoming connections and redirect them to this proxy. You can do this via Cloudflare tunnels or via a front-facing reverse proxy/webserver.
 
 
+## Resize Strategies
+
+The proxy supports two different image resizing strategies:
+
+### Bounding Box Strategy (Default)
+When `IMG_MAX_NARROW_SIDE` is not set (or set to 0), the proxy uses the traditional bounding box approach where both width and height must fit within the specified `IMG_MAX_WIDTH` and `IMG_MAX_HEIGHT` limits.
+
+### Narrow Side Strategy
+When `IMG_MAX_NARROW_SIDE` is set to a value greater than 0, the proxy constrains only the narrow side (shorter dimension) of the image to the specified limit. The wide side can be larger, which is useful for panoramic images or when you want to preserve more detail in one dimension.
+
+For example, with `IMG_MAX_NARROW_SIDE=600`:
+- A 2000x800 landscape image becomes 1500x600 (narrow side constrained to 600)
+- A 800x2000 portrait image becomes 600x1500 (narrow side constrained to 600)
+
 ## Environment variables
 
 |Variable name                          |Default                         | Comment
 |-------------------------------|-----------------------------| -----------------------------|
-|`IMG_MAX_WIDTH`            |1920            | Pixels, keeps aspect ratio
-|`IMG_MAX_HEIGHT`            |1080            | Pixels, keeps aspect ratio
+|`IMG_MAX_WIDTH`            |1920            | Pixels, keeps aspect ratio (ignored if IMG_MAX_NARROW_SIDE is set)
+|`IMG_MAX_HEIGHT`            |1080            | Pixels, keeps aspect ratio (ignored if IMG_MAX_NARROW_SIDE is set)
+|`IMG_MAX_NARROW_SIDE`      |0 (disabled)    | Pixels, constrains the narrow side of the image, allows wide side to be larger
 |`JPEG_QUALITY`|75|JPEG compression quality (1-100, lower = smaller file)
 |`UPLOAD_MAX_SIZE`|104857600|Maximum form size in bytes
 |`IMG_MAX_PIXELS`|2073600|If the images width*height (in pixels) doesn't exceed this value, don't resize

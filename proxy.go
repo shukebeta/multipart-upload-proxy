@@ -20,9 +20,10 @@ import (
 // Settings / Environment Variables
 const IMG_MAX_WIDTH = "IMG_MAX_WIDTH"
 const IMG_MAX_HEIGHT = "IMG_MAX_HEIGHT"
+const IMG_MAX_NARROW_SIDE = "IMG_MAX_NARROW_SIDE"
 const JPEG_QUALITY = "JPEG_QUALITY"
 
-var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, JPEG_QUALITY}
+var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY}
 var settingsInt map[string]int
 
 const UPLOAD_MAX_SIZE = "UPLOAD_MAX_SIZE"
@@ -49,11 +50,12 @@ func main() {
 	// Integer32
 	settingsInt = make(map[string]int)
 	var defaultSettingsInt = map[string]int{
-		IMG_MAX_WIDTH:  1920,
-		IMG_MAX_HEIGHT: 1080,
-		JPEG_QUALITY:   75,
+		IMG_MAX_WIDTH:       1920,
+		IMG_MAX_HEIGHT:      1080,
+		IMG_MAX_NARROW_SIDE: 0, // 0 means not set, use original logic
+		JPEG_QUALITY:        75,
 	}
-	var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, JPEG_QUALITY}
+	var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY}
 	for _, intKey := range intKeys {
 		settingsInt[intKey] = defaultSettingsInt[intKey]
 
@@ -178,29 +180,57 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 	oldImage := bimg.NewImage(byteContainer)
 	oldImageSize, err := oldImage.Size()
 	if err == nil {
-		// Check if image exceeds size limits
-		needsResize := oldImageSize.Width > settingsInt[IMG_MAX_WIDTH] || oldImageSize.Height > settingsInt[IMG_MAX_HEIGHT]
-		
 		var newWidth, newHeight int
-		if needsResize {
-			log.Println("Resizing needed - image exceeds limits")
-			
-			// Calculate scale factors for both dimensions
-			scaleWidth := float64(settingsInt[IMG_MAX_WIDTH]) / float64(oldImageSize.Width)
-			scaleHeight := float64(settingsInt[IMG_MAX_HEIGHT]) / float64(oldImageSize.Height)
-			
-			// Use the smaller scale factor to ensure both dimensions fit
-			scale := scaleWidth
-			if scaleHeight < scaleWidth {
-				scale = scaleHeight
+		var needsResize bool
+		
+		// Check if narrow side constraint is set (priority over width/height limits)
+		narrowSideLimit, narrowSideSet := settingsInt[IMG_MAX_NARROW_SIDE]
+		if narrowSideSet && narrowSideLimit > 0 {
+			// Use narrow side strategy
+			narrowSide := oldImageSize.Width
+			if oldImageSize.Height < oldImageSize.Width {
+				narrowSide = oldImageSize.Height
 			}
 			
-			newWidth = int(float64(oldImageSize.Width) * scale)
-			newHeight = int(float64(oldImageSize.Height) * scale)
+			needsResize = narrowSide > narrowSideLimit
+			
+			if needsResize {
+				log.Println("Resizing needed - narrow side exceeds limit")
+				
+				// Calculate scale factor based on narrow side
+				scale := float64(narrowSideLimit) / float64(narrowSide)
+				
+				newWidth = int(float64(oldImageSize.Width) * scale)
+				newHeight = int(float64(oldImageSize.Height) * scale)
+			} else {
+				log.Println("No resizing needed - narrow side within limit")
+				newWidth = oldImageSize.Width
+				newHeight = oldImageSize.Height
+			}
 		} else {
-			log.Println("No resizing needed - keeping original dimensions")
-			newWidth = oldImageSize.Width
-			newHeight = oldImageSize.Height
+			// Use original bounding box strategy
+			needsResize = oldImageSize.Width > settingsInt[IMG_MAX_WIDTH] || oldImageSize.Height > settingsInt[IMG_MAX_HEIGHT]
+			
+			if needsResize {
+				log.Println("Resizing needed - image exceeds limits")
+				
+				// Calculate scale factors for both dimensions
+				scaleWidth := float64(settingsInt[IMG_MAX_WIDTH]) / float64(oldImageSize.Width)
+				scaleHeight := float64(settingsInt[IMG_MAX_HEIGHT]) / float64(oldImageSize.Height)
+				
+				// Use the smaller scale factor to ensure both dimensions fit
+				scale := scaleWidth
+				if scaleHeight < scaleWidth {
+					scale = scaleHeight
+				}
+				
+				newWidth = int(float64(oldImageSize.Width) * scale)
+				newHeight = int(float64(oldImageSize.Height) * scale)
+			} else {
+				log.Println("No resizing needed - keeping original dimensions")
+				newWidth = oldImageSize.Width
+				newHeight = oldImageSize.Height
+			}
 		}
 
 		// Always process the image (for format conversion and quality compression)
