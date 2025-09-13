@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"log"
-	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -22,8 +21,9 @@ const IMG_MAX_WIDTH = "IMG_MAX_WIDTH"
 const IMG_MAX_HEIGHT = "IMG_MAX_HEIGHT"
 const IMG_MAX_NARROW_SIDE = "IMG_MAX_NARROW_SIDE"
 const JPEG_QUALITY = "JPEG_QUALITY"
+const NORMALIZE_EXTENSIONS = "NORMALIZE_EXTENSIONS"
 
-var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY}
+var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY, NORMALIZE_EXTENSIONS}
 var settingsInt map[string]int
 
 const UPLOAD_MAX_SIZE = "UPLOAD_MAX_SIZE"
@@ -50,12 +50,13 @@ func main() {
 	// Integer32
 	settingsInt = make(map[string]int)
 	var defaultSettingsInt = map[string]int{
-		IMG_MAX_WIDTH:       1920,
-		IMG_MAX_HEIGHT:      1080,
-		IMG_MAX_NARROW_SIDE: 0, // 0 means not set, use original logic
-		JPEG_QUALITY:        75,
+		IMG_MAX_WIDTH:         1920,
+		IMG_MAX_HEIGHT:        1080,
+		IMG_MAX_NARROW_SIDE:   0, // 0 means not set, use original logic
+		JPEG_QUALITY:          75,
+		NORMALIZE_EXTENSIONS:  1, // 1 means normalize to .jpg, 0 means keep original
 	}
-	var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY}
+	var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY, NORMALIZE_EXTENSIONS}
 	for _, intKey := range intKeys {
 		settingsInt[intKey] = defaultSettingsInt[intKey]
 
@@ -291,17 +292,33 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 		io.Copy(fw, strings.NewReader(formValue))
 	}
 
-	// Add new file
-	mimeType := handler.Header.Get("Content-Type")
-	if mimeType == "" || mimeType == "application/octet-stream" {
-		extension := filepath.Ext(handler.Filename)
-		mimeType = mime.TypeByExtension(extension)
-		if mimeType == "" {
-			mimeType = "application/octet-stream"
+	// Add new file with proper filename and MIME type
+	var finalFilename string
+	var finalMimeType string
+	
+	// Check if this file was actually processed as an image
+	wasImageProcessed := err == nil  // err is from oldImage.Size() above
+	
+	if wasImageProcessed && settingsInt[NORMALIZE_EXTENSIONS] == 1 {
+		// Only normalize extensions for successfully processed images
+		finalMimeType = "image/jpeg"
+		finalFilename = changeExtensionToJPG(handler.Filename)
+		log.Printf("Normalizing image filename: %s -> %s", handler.Filename, finalFilename)
+	} else if wasImageProcessed {
+		// Image was processed but keep original filename
+		finalFilename = handler.Filename
+		finalMimeType = "image/jpeg"  // But fix MIME type since content is JPEG
+	} else {
+		// Not an image or processing failed - keep everything original
+		finalFilename = handler.Filename
+		finalMimeType = handler.Header.Get("Content-Type")
+		if finalMimeType == "" {
+			finalMimeType = "application/octet-stream"
 		}
+		log.Printf("Non-image file, keeping original: %s (%s)", finalFilename, finalMimeType)
 	}
 
-	fw, _ := CreateFormFileWithMime(writer, settingsString[FILE_UPLOAD_FIELD], handler.Filename, mimeType)
+	fw, _ := CreateFormFileWithMime(writer, settingsString[FILE_UPLOAD_FIELD], finalFilename, finalMimeType)
 	io.Copy(fw, bytes.NewReader(byteContainer))
 	writer.Close()
 
@@ -314,6 +331,18 @@ var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
 
 func escapeQuotes(s string) string {
 	return quoteEscaper.Replace(s)
+}
+
+// changeExtensionToJPG changes the file extension to .jpg
+func changeExtensionToJPG(filename string) string {
+	extension := filepath.Ext(filename)
+	if extension == "" {
+		return filename + ".jpg"
+	}
+	
+	// Remove the original extension and add .jpg
+	nameWithoutExt := strings.TrimSuffix(filename, extension)
+	return nameWithoutExt + ".jpg"
 }
 
 func CreateFormFileWithMime(w *multipart.Writer, fieldname, filename, mimeType string) (io.Writer, error) {

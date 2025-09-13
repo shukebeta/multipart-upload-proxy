@@ -41,6 +41,15 @@ For example, with `IMG_MAX_NARROW_SIDE=600`:
 - A 2000x800 landscape image becomes 1500x600 (narrow side constrained to 600)
 - A 800x2000 portrait image becomes 600x1500 (narrow side constrained to 600)
 
+### File Extension Normalization
+
+Since all images are converted to JPEG format, you can choose whether to normalize file extensions:
+
+- **Enabled** (`NORMALIZE_EXTENSIONS=1`, default): `photo.png` → `photo.jpg`, `image.heic` → `image.jpg`
+- **Disabled** (`NORMALIZE_EXTENSIONS=0`): Keep original filenames like `photo.png`, but MIME type is corrected to `image/jpeg`
+
+This ensures consistency between file extensions, MIME types, and actual content format.
+
 ## Environment variables
 
 |Variable name                          |Default                         | Comment
@@ -49,6 +58,7 @@ For example, with `IMG_MAX_NARROW_SIDE=600`:
 |`IMG_MAX_HEIGHT`            |1080            | Pixels, keeps aspect ratio (ignored if IMG_MAX_NARROW_SIDE is set)
 |`IMG_MAX_NARROW_SIDE`      |0 (disabled)    | Pixels, constrains the narrow side of the image, allows wide side to be larger
 |`JPEG_QUALITY`|75|JPEG compression quality (1-100, lower = smaller file)
+|`NORMALIZE_EXTENSIONS`|1 (enabled)|Normalize filenames to .jpg extension (1=enabled, 0=keep original names)
 |`UPLOAD_MAX_SIZE`|104857600|Maximum form size in bytes
 |`IMG_MAX_PIXELS`|2073600|If the images width*height (in pixels) doesn't exceed this value, don't resize
 |`FORWARD_DESTINATION`|https://httpbin.org/post|Where should the result be sent to
