@@ -57,10 +57,10 @@ This ensures consistency between file extensions, MIME types, and actual content
 |`IMG_MAX_WIDTH`            |1920            | Pixels, keeps aspect ratio (ignored if IMG_MAX_NARROW_SIDE is set)
 |`IMG_MAX_HEIGHT`            |1080            | Pixels, keeps aspect ratio (ignored if IMG_MAX_NARROW_SIDE is set)
 |`IMG_MAX_NARROW_SIDE`      |0 (disabled)    | Pixels, constrains the narrow side of the image, allows wide side to be larger
-|`JPEG_QUALITY`|75|JPEG compression quality (1-100, lower = smaller file)
-|`NORMALIZE_EXTENSIONS`|1 (enabled)|Normalize filenames to .jpg extension (1=enabled, 0=keep original names)
+|`JPEG_QUALITY`|75|JPEG compression quality (1-100, lower = smaller file). Invalid values fall back to default
+|`NORMALIZE_EXTENSIONS`|1 (enabled)|Normalize filenames to .jpg extension (1=enabled, 0=keep original names). Invalid values fall back to default
 |`UPLOAD_MAX_SIZE`|104857600|Maximum form size in bytes
-|`IMG_MAX_PIXELS`|2073600|If the images width*height (in pixels) doesn't exceed this value, don't resize
+|`IMG_MAX_PIXELS`|2073600|If the images width*height (in pixels) doesn't exceed this value, don't resize. Defaults to IMG_MAX_WIDTH × IMG_MAX_HEIGHT
 |`FORWARD_DESTINATION`|https://httpbin.org/post|Where should the result be sent to
 |`FILE_UPLOAD_FIELD`|assetData|Name of the file field to potentially resize
 |`LISTEN_PATH`|/api/assets|Path used to process file uploads
