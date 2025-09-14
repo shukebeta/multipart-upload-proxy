@@ -168,7 +168,7 @@ func main() {
 
 	// Other
 	client = &http.Client{
-		Timeout: time.Second * 10,
+		Timeout: time.Second * 60,  // Increased from 10s to 60s for large files (videos, high-res images)
 	}
 
 	http.HandleFunc(settingsString[LISTEN_PATH], proxyHandler)
