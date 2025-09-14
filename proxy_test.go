@@ -843,13 +843,13 @@ func TestExtensionNormalization(t *testing.T) {
 		expected string
 		name     string
 	}{
-		{"photo.png", "photo.jpg", "PNG to JPG"},
-		{"image.HEIC", "image.jpg", "HEIC to JPG"},
-		{"pic.webp", "pic.jpg", "WebP to JPG"},
-		{"document.pdf", "document.jpg", "PDF to JPG"},
-		{"noext", "noext.jpg", "No extension"},
-		{"image.jpeg", "image.jpg", "JPEG to JPG"},
-		{"complex.name.with.dots.png", "complex.name.with.dots.jpg", "Multiple dots"},
+		{"photo.png", "photo.JPG", "PNG to JPG"},
+		{"image.HEIC", "image.JPG", "HEIC to JPG"},
+		{"pic.webp", "pic.JPG", "WebP to JPG"},
+		{"document.pdf", "document.JPG", "PDF to JPG"},
+		{"noext", "noext.JPG", "No extension"},
+		{"image.jpeg", "image.JPG", "JPEG to JPG"},
+		{"complex.name.with.dots.png", "complex.name.with.dots.JPG", "Multiple dots"},
 	}
 
 	for _, tc := range testCases {
@@ -1075,7 +1075,7 @@ func TestMIMEConsistencyWithBytes(t *testing.T) {
 	
 	// Simple test: check if result contains JPEG markers when it should contain PNG
 	containsJPEGMime := strings.Contains(resultStr, "image/jpeg")
-	containsJPGFilename := strings.Contains(resultStr, "test.jpg")
+	containsJPGFilename := strings.Contains(resultStr, "test.JPG")
 	containsPNGBytes := bytes.Contains(resultBody.Bytes(), []byte{0x89, 0x50, 0x4E, 0x47}) // PNG signature
 	
 	t.Logf("Result analysis:")
@@ -1292,12 +1292,12 @@ func TestChangeExtensionEdgeCases(t *testing.T) {
 		expected string
 		name     string
 	}{
-		{"photo.png", "photo.jpg", "Standard PNG to JPG"},
-		{"image.JPEG", "image.jpg", "Uppercase extension"},
-		{"file_without_ext", "file_without_ext.jpg", "No extension"},
-		{"document.pdf.png", "document.pdf.jpg", "Multiple extensions"},
-		{"my.vacation.2023.heic", "my.vacation.2023.jpg", "Multiple dots with HEIC"},
-		{"IMG_001", "IMG_001.jpg", "Camera file without extension"},
+		{"photo.png", "photo.JPG", "Standard PNG to JPG"},
+		{"image.JPEG", "image.JPG", "Uppercase extension"},
+		{"file_without_ext", "file_without_ext.JPG", "No extension"},
+		{"document.pdf.png", "document.pdf.JPG", "Multiple extensions"},
+		{"my.vacation.2023.heic", "my.vacation.2023.JPG", "Multiple dots with HEIC"},
+		{"IMG_001", "IMG_001.JPG", "Camera file without extension"},
 	}
 	
 	for _, tc := range testCases {

@@ -45,7 +45,7 @@ For example, with `IMG_MAX_NARROW_SIDE=600`:
 
 The proxy attempts to compress images to JPEG format, but only uses the compressed version if it results in a smaller file size. For successfully compressed images, you can choose whether to normalize file extensions:
 
-- **Enabled** (`NORMALIZE_EXTENSIONS=1`, default): When compression is beneficial, `photo.png` → `photo.jpg`, `image.heic` → `image.jpg`
+- **Enabled** (`NORMALIZE_EXTENSIONS=1`, default): When compression is beneficial, `photo.png` → `photo.JPG`, `image.heic` → `image.JPG`
 - **Disabled** (`NORMALIZE_EXTENSIONS=0`): Keep original filenames even for compressed images
 
 When compression doesn't reduce file size, the original image format and filename are preserved to maintain quality and avoid unnecessary format conversion.
@@ -58,7 +58,7 @@ When compression doesn't reduce file size, the original image format and filenam
 |`IMG_MAX_HEIGHT`            |1080            | Pixels, keeps aspect ratio (ignored if IMG_MAX_NARROW_SIDE is set)
 |`IMG_MAX_NARROW_SIDE`      |0 (disabled)    | Pixels, constrains the narrow side of the image, allows wide side to be larger
 |`JPEG_QUALITY`|75|JPEG compression quality (1-100, lower = smaller file). Invalid values fall back to default
-|`NORMALIZE_EXTENSIONS`|1 (enabled)|Normalize filenames to .jpg extension (1=enabled, 0=keep original names). Invalid values fall back to default
+|`NORMALIZE_EXTENSIONS`|1 (enabled)|Normalize filenames to .JPG extension (1=enabled, 0=keep original names). Invalid values fall back to default
 |`UPLOAD_MAX_SIZE`|104857600|Maximum form size in bytes
 |`IMG_MAX_PIXELS`|2073600|If the images width*height (in pixels) doesn't exceed this value, don't resize. Defaults to IMG_MAX_WIDTH × IMG_MAX_HEIGHT
 |`FORWARD_DESTINATION`|https://httpbin.org/post|Where should the result be sent to

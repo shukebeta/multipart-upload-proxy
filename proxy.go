@@ -82,7 +82,7 @@ func initializeSettings() {
 		IMG_MAX_HEIGHT:        1080,
 		IMG_MAX_NARROW_SIDE:   0, // 0 means not set, use original logic
 		JPEG_QUALITY:          75,
-		NORMALIZE_EXTENSIONS:  1, // 1 means normalize to .jpg, 0 means keep original
+		NORMALIZE_EXTENSIONS:  1, // 1 means normalize to .JPG, 0 means keep original
 	}
 	for _, intKey := range intKeys {
 		settingsInt[intKey] = defaultSettingsInt[intKey]
@@ -326,19 +326,19 @@ func escapeQuotes(s string) string {
 	return quoteEscaper.Replace(s)
 }
 
-// changeExtensionToJPG changes the file extension to .jpg
+// changeExtensionToJPG changes the file extension to .JPG
 // This function is only called for valid image files that have been successfully processed
 func changeExtensionToJPG(filename string) string {
 	extension := filepath.Ext(filename)
 	
 	// Handle files with no extension 
 	if extension == "" {
-		return filename + ".jpg"
+		return filename + ".JPG"
 	}
 	
 	// Handle files with extension - replace the extension
 	nameWithoutExt := strings.TrimSuffix(filename, extension)
-	return nameWithoutExt + ".jpg"
+	return nameWithoutExt + ".JPG"
 }
 
 func CreateFormFileWithMime(w *multipart.Writer, fieldname, filename, mimeType string) (io.Writer, error) {
