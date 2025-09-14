@@ -392,13 +392,11 @@ func copyHeader(dst, src http.Header) {
 
 // processImageWithStrategy processes an image according to the given settings
 func processImageWithStrategy(originalData []byte, settings ImageProcessingSettings) (*ImageProcessingResult, error) {
-	oldImage := bimg.NewImage(originalData)
-	
-	// Handle EXIF orientation first
-	workingImage, err := handleEXIFOrientation(oldImage)
+	// Handle EXIF orientation first - this gives us the corrected image and bytes
+	workingImage, rotatedData, err := handleEXIFOrientation(originalData)
 	if err != nil {
 		return &ImageProcessingResult{
-			ProcessedData:   originalData,
+			ProcessedData:   rotatedData,  // rotatedData will be originalData if rotation failed
 			WasCompressed:   false,
 			ProcessingError: err,
 		}, err
@@ -408,7 +406,7 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 	oldImageSize, err := workingImage.Size()
 	if err != nil {
 		return &ImageProcessingResult{
-			ProcessedData:   originalData,
+			ProcessedData:   rotatedData,  // Return rotated data even if processing fails
 			WasCompressed:   false,
 			ProcessingError: err,
 		}, err
@@ -431,16 +429,16 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 	processedData, err := workingImage.Process(options)
 	if err != nil {
 		return &ImageProcessingResult{
-			ProcessedData:   originalData,
+			ProcessedData:   rotatedData,  // Return rotated data even if JPEG processing fails
 			WasCompressed:   false,
 			NewDimensions:   ImageSize{Width: oldImageSize.Width, Height: oldImageSize.Height},
 			ProcessingError: err,
 		}, err
 	}
 	
-	// Determine if compression was beneficial
-	wasCompressed := len(processedData) < len(originalData)
-	finalData := originalData
+	// Determine if compression was beneficial compared to rotated data
+	wasCompressed := len(processedData) < len(rotatedData)
+	finalData := rotatedData  // Use rotated data as baseline (preserves EXIF rotation)
 	if wasCompressed {
 		finalData = processedData
 	}
@@ -453,21 +451,23 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 }
 
 // handleEXIFOrientation handles EXIF orientation correction
-func handleEXIFOrientation(image *bimg.Image) (*bimg.Image, error) {
+// Returns both the corrected image and the corrected bytes
+func handleEXIFOrientation(originalData []byte) (*bimg.Image, []byte, error) {
+	image := bimg.NewImage(originalData)
 	metadata, err := image.Metadata()
 	needsRotation := err == nil && metadata.Orientation > EXIF_ORIENTATION_NORMAL
 	
 	if needsRotation {
 		log.Println("EXIF orientation detected, applying rotation")
-		rotatedImage, err := image.AutoRotate()
+		rotatedBytes, err := image.AutoRotate()
 		if err != nil {
 			log.Printf("AutoRotate failed, using original orientation: %v", err)
-			return image, nil // Return original, not an error
+			return image, originalData, nil // Return original, not an error
 		}
-		return bimg.NewImage(rotatedImage), nil
+		return bimg.NewImage(rotatedBytes), rotatedBytes, nil
 	}
 	
-	return image, nil
+	return image, originalData, nil
 }
 
 // calculateResizeDimensions calculates the new dimensions based on resize strategy

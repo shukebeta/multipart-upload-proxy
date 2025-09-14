@@ -1174,10 +1174,8 @@ func TestEXIFRotationPersistence(t *testing.T) {
 	t.Logf("Filename: %s", handler.Filename)
 	
 	// Test EXIF handling function directly
-	oldImage := bimg.NewImage(byteContainer)
-	
 	// Check if our handleEXIFOrientation function preserves rotation
-	_, err = handleEXIFOrientation(oldImage)
+	_, _, err = handleEXIFOrientation(byteContainer)
 	if err != nil {
 		t.Fatalf("handleEXIFOrientation failed: %v", err)
 	}
