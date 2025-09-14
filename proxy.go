@@ -84,7 +84,6 @@ func initializeSettings() {
 		JPEG_QUALITY:          75,
 		NORMALIZE_EXTENSIONS:  1, // 1 means normalize to .jpg, 0 means keep original
 	}
-	var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY, NORMALIZE_EXTENSIONS}
 	for _, intKey := range intKeys {
 		settingsInt[intKey] = defaultSettingsInt[intKey]
 
@@ -240,122 +239,30 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 		log.Printf("Failed to read file: %v", err)
 		return "", nil, err
 	}
-	oldImage := bimg.NewImage(byteContainer)
 	
-	// Check if image has EXIF orientation data that needs correction
-	var workingImage *bimg.Image
-	
-	// Get EXIF orientation (this is fast, just metadata reading)
-	metadata, metadataErr := oldImage.Metadata()
-	needsRotation := metadataErr == nil && metadata.Orientation > EXIF_ORIENTATION_NORMAL
-	
-	if needsRotation {
-		// Only do expensive AutoRotate when actually needed
-		log.Println("EXIF orientation detected, applying rotation")
-		rotatedImage, rotateErr := oldImage.AutoRotate()
-		if rotateErr != nil {
-			log.Printf("AutoRotate failed, using original orientation: %v", rotateErr)
-			workingImage = oldImage
-		} else {
-			workingImage = bimg.NewImage(rotatedImage)
-			// CRITICAL FIX: Update byteContainer with rotated image when no further processing needed
-			byteContainer = rotatedImage
-		}
-	} else {
-		// No rotation needed, use original image directly (fast path)
-		workingImage = oldImage
+	// Use the helper function to process the image
+	settings := ImageProcessingSettings{
+		MaxWidth:      settingsInt[IMG_MAX_WIDTH],
+		MaxHeight:     settingsInt[IMG_MAX_HEIGHT],
+		MaxNarrowSide: settingsInt[IMG_MAX_NARROW_SIDE],
+		JpegQuality:   settingsInt[JPEG_QUALITY],
 	}
 	
-	// Get size from properly oriented image
-	oldImageSize, sizeErr := workingImage.Size()
+	result, err := processImageWithStrategy(byteContainer, settings)
 	
-	// Track processing results with clear variables
-	var wasImageProcessed bool  // True if we successfully parsed as image
-	var actuallyCompressed bool // True if we replaced bytes with compressed version
+	// Track processing results
+	var wasImageProcessed bool
+	var actuallyCompressed bool
 	
-	// Process image only if we got valid size information
-	if sizeErr == nil {
+	if err == nil {
 		wasImageProcessed = true
-		
-		var newWidth, newHeight int
-		var needsResize bool
-		
-		// Check if narrow side constraint is set (priority over width/height limits)
-		narrowSideLimit, narrowSideSet := settingsInt[IMG_MAX_NARROW_SIDE]
-		if narrowSideSet && narrowSideLimit > 0 {
-			// Use narrow side strategy
-			narrowSide := oldImageSize.Width
-			if oldImageSize.Height < oldImageSize.Width {
-				narrowSide = oldImageSize.Height
-			}
-			
-			needsResize = narrowSide > narrowSideLimit
-			
-			if needsResize {
-				log.Println("Resizing needed - narrow side exceeds limit")
-				
-				// Calculate scale factor based on narrow side
-				scale := float64(narrowSideLimit) / float64(narrowSide)
-				
-				newWidth = int(float64(oldImageSize.Width) * scale)
-				newHeight = int(float64(oldImageSize.Height) * scale)
-			} else {
-				log.Println("No resizing needed - narrow side within limit")
-				newWidth = oldImageSize.Width
-				newHeight = oldImageSize.Height
-			}
-		} else {
-			// Use original bounding box strategy
-			needsResize = oldImageSize.Width > settingsInt[IMG_MAX_WIDTH] || oldImageSize.Height > settingsInt[IMG_MAX_HEIGHT]
-			
-			if needsResize {
-				log.Println("Resizing needed - image exceeds limits")
-				
-				// Calculate scale factors for both dimensions
-				scaleWidth := float64(settingsInt[IMG_MAX_WIDTH]) / float64(oldImageSize.Width)
-				scaleHeight := float64(settingsInt[IMG_MAX_HEIGHT]) / float64(oldImageSize.Height)
-				
-				// Use the smaller scale factor to ensure both dimensions fit
-				scale := scaleWidth
-				if scaleHeight < scaleWidth {
-					scale = scaleHeight
-				}
-				
-				newWidth = int(float64(oldImageSize.Width) * scale)
-				newHeight = int(float64(oldImageSize.Height) * scale)
-			} else {
-				log.Println("No resizing needed - keeping original dimensions")
-				newWidth = oldImageSize.Width
-				newHeight = oldImageSize.Height
-			}
-		}
-
-		// Always process the image (for format conversion and quality compression)
-		options := bimg.Options{
-			Width:   newWidth,
-			Height:  newHeight,
-			Quality: settingsInt[JPEG_QUALITY],
-			Type:    bimg.JPEG,
-		}
-		
-		newByteContainer, processErr := workingImage.Process(options)
-		if processErr == nil {
-			if len(byteContainer) > len(newByteContainer) {
-				log.Println("Processing saved space, so we're taking that")
-				byteContainer = newByteContainer
-				actuallyCompressed = true
-			} else {
-				log.Println("After processing, original file is smaller - therefore keeping the original")
-				actuallyCompressed = false
-			}
-		} else {
-			log.Printf("Processing error: %v", processErr)
-			actuallyCompressed = false
-		}
+		actuallyCompressed = result.WasCompressed
+		byteContainer = result.ProcessedData
 	} else {
-		log.Printf("Size() Error: %v", sizeErr)
+		log.Printf("Image processing error: %v", err)
 		wasImageProcessed = false
 		actuallyCompressed = false
+		// byteContainer remains original data
 	}
 
 	// Copy form values

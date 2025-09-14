@@ -43,12 +43,12 @@ For example, with `IMG_MAX_NARROW_SIDE=600`:
 
 ### File Extension Normalization
 
-Since all images are converted to JPEG format, you can choose whether to normalize file extensions:
+The proxy attempts to compress images to JPEG format, but only uses the compressed version if it results in a smaller file size. For successfully compressed images, you can choose whether to normalize file extensions:
 
-- **Enabled** (`NORMALIZE_EXTENSIONS=1`, default): `photo.png` → `photo.jpg`, `image.heic` → `image.jpg`
-- **Disabled** (`NORMALIZE_EXTENSIONS=0`): Keep original filenames like `photo.png`, but MIME type is corrected to `image/jpeg`
+- **Enabled** (`NORMALIZE_EXTENSIONS=1`, default): When compression is beneficial, `photo.png` → `photo.jpg`, `image.heic` → `image.jpg`
+- **Disabled** (`NORMALIZE_EXTENSIONS=0`): Keep original filenames even for compressed images
 
-This ensures consistency between file extensions, MIME types, and actual content format.
+When compression doesn't reduce file size, the original image format and filename are preserved to maintain quality and avoid unnecessary format conversion.
 
 ## Environment variables
 
