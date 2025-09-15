@@ -21,10 +21,22 @@ const (
 	EXIF_ORIENTATION_NORMAL = 1
 )
 
-// Default MIME type constants  
+// Default MIME type constants
 const (
 	DEFAULT_MIME_TYPE = "application/octet-stream"
 	JPEG_MIME_TYPE    = "image/jpeg"
+	WEBP_MIME_TYPE    = "image/webp"
+)
+
+// Default settings constants
+const (
+	DEFAULT_IMG_MAX_WIDTH         = 1920
+	DEFAULT_IMG_MAX_HEIGHT        = 1080
+	DEFAULT_IMG_MAX_NARROW_SIDE   = 0  // 0 means not set, use original logic
+	DEFAULT_JPEG_QUALITY          = 90 // Increased from 75 to 90 per author feedback
+	DEFAULT_WEBP_QUALITY          = 85 // WebP default quality
+	DEFAULT_NORMALIZE_EXTENSIONS  = 1  // 1 means normalize extensions, 0 means keep original
+	DEFAULT_CONVERT_TO_FORMAT     = "" // Empty = disabled (backwards compatible)
 )
 
 // Image processing types
@@ -52,9 +64,10 @@ const IMG_MAX_WIDTH = "IMG_MAX_WIDTH"
 const IMG_MAX_HEIGHT = "IMG_MAX_HEIGHT"
 const IMG_MAX_NARROW_SIDE = "IMG_MAX_NARROW_SIDE"
 const JPEG_QUALITY = "JPEG_QUALITY"
+const WEBP_QUALITY = "WEBP_QUALITY"
 const NORMALIZE_EXTENSIONS = "NORMALIZE_EXTENSIONS"
 
-var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY, NORMALIZE_EXTENSIONS}
+var intKeys = []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY, WEBP_QUALITY, NORMALIZE_EXTENSIONS}
 var settingsInt map[string]int
 
 const UPLOAD_MAX_SIZE = "UPLOAD_MAX_SIZE"
@@ -67,8 +80,9 @@ var settingsInt64 map[string]int64
 const FORWARD_DESTINATION = "FORWARD_DESTINATION"
 const FILE_UPLOAD_FIELD = "FILE_UPLOAD_FIELD"
 const LISTEN_PATH = "LISTEN_PATH"
+const CONVERT_TO_FORMAT = "CONVERT_TO_FORMAT"
 
-var stringKeys = []string{FORWARD_DESTINATION, FILE_UPLOAD_FIELD, LISTEN_PATH}
+var stringKeys = []string{FORWARD_DESTINATION, FILE_UPLOAD_FIELD, LISTEN_PATH, CONVERT_TO_FORMAT}
 var settingsString map[string]string
 
 var client *http.Client
@@ -78,11 +92,12 @@ func initializeSettings() {
 	// Integer32
 	settingsInt = make(map[string]int)
 	var defaultSettingsInt = map[string]int{
-		IMG_MAX_WIDTH:         1920,
-		IMG_MAX_HEIGHT:        1080,
-		IMG_MAX_NARROW_SIDE:   0, // 0 means not set, use original logic
-		JPEG_QUALITY:          75,
-		NORMALIZE_EXTENSIONS:  1, // 1 means normalize to .JPG, 0 means keep original
+		IMG_MAX_WIDTH:         DEFAULT_IMG_MAX_WIDTH,
+		IMG_MAX_HEIGHT:        DEFAULT_IMG_MAX_HEIGHT,
+		IMG_MAX_NARROW_SIDE:   DEFAULT_IMG_MAX_NARROW_SIDE,
+		JPEG_QUALITY:          DEFAULT_JPEG_QUALITY,
+		WEBP_QUALITY:          DEFAULT_WEBP_QUALITY,
+		NORMALIZE_EXTENSIONS:  DEFAULT_NORMALIZE_EXTENSIONS,
 	}
 	for _, intKey := range intKeys {
 		settingsInt[intKey] = defaultSettingsInt[intKey]
@@ -93,18 +108,18 @@ func initializeSettings() {
 			if err == nil {
 				// Validate environment variable values
 				switch intKey {
-				case JPEG_QUALITY:
+				case JPEG_QUALITY, WEBP_QUALITY:
 					if convEnvValue >= 1 && convEnvValue <= 100 {
 						settingsInt[intKey] = convEnvValue
 					} else {
-						log.Printf("Invalid %s value %d, using default %d (valid range: 1-100)", 
+						log.Printf("Invalid %s value %d, using default %d (valid range: 1-100)",
 							intKey, convEnvValue, defaultSettingsInt[intKey])
 					}
 				case NORMALIZE_EXTENSIONS:
 					if convEnvValue == 0 || convEnvValue == 1 {
 						settingsInt[intKey] = convEnvValue
 					} else {
-						log.Printf("Invalid %s value %d, using default %d (valid values: 0 or 1)", 
+						log.Printf("Invalid %s value %d, using default %d (valid values: 0 or 1)",
 							intKey, convEnvValue, defaultSettingsInt[intKey])
 					}
 				default:
@@ -112,7 +127,7 @@ func initializeSettings() {
 					settingsInt[intKey] = convEnvValue
 				}
 			} else {
-				log.Printf("Invalid %s value %q, using default %d", 
+				log.Printf("Invalid %s value %q, using default %d",
 					intKey, envValue, defaultSettingsInt[intKey])
 			}
 		}
@@ -146,13 +161,25 @@ func initializeSettings() {
 		FORWARD_DESTINATION: "https://httpbin.org/anything",
 		FILE_UPLOAD_FIELD:   "assetData",
 		LISTEN_PATH:         "/api/assets",
+		CONVERT_TO_FORMAT:   DEFAULT_CONVERT_TO_FORMAT,
 	}
 	for _, stringKey := range stringKeys {
 		settingsString[stringKey] = defaultSettingsString[stringKey]
 
 		envValue := os.Getenv(stringKey)
 		if len(envValue) > 0 {
-			settingsString[stringKey] = envValue
+			// Validate CONVERT_TO_FORMAT values
+			if stringKey == CONVERT_TO_FORMAT {
+				normalizedFormat := strings.ToUpper(strings.TrimSpace(envValue))
+				if normalizedFormat == "" || normalizedFormat == "JPEG" || normalizedFormat == "WEBP" {
+					settingsString[stringKey] = normalizedFormat
+				} else {
+					log.Printf("Invalid %s value %q, using default %q (valid values: \"\", \"JPEG\", \"WEBP\")",
+						stringKey, envValue, defaultSettingsString[stringKey])
+				}
+			} else {
+				settingsString[stringKey] = envValue
+			}
 		}
 
 		log.Println(stringKey+": ", settingsString[stringKey])
@@ -239,7 +266,7 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 		log.Printf("Failed to read file: %v", err)
 		return "", nil, err
 	}
-	
+
 	// Use the helper function to process the image
 	settings := ImageProcessingSettings{
 		MaxWidth:      settingsInt[IMG_MAX_WIDTH],
@@ -247,13 +274,13 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 		MaxNarrowSide: settingsInt[IMG_MAX_NARROW_SIDE],
 		JpegQuality:   settingsInt[JPEG_QUALITY],
 	}
-	
+
 	result, err := processImageWithStrategy(byteContainer, settings)
-	
+
 	// Track processing results
 	var wasImageProcessed bool
 	var actuallyCompressed bool
-	
+
 	if err == nil {
 		wasImageProcessed = true
 		actuallyCompressed = result.WasCompressed
@@ -279,28 +306,49 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 	// Add new file with proper filename and MIME type
 	var finalFilename string
 	var finalMimeType string
-	
-	// CRITICAL FIX: Use the correct wasImageProcessed variable we set above
-	// instead of relying on unclear 'err' variable
-	
-	if wasImageProcessed && actuallyCompressed && settingsInt[NORMALIZE_EXTENSIONS] == 1 {
-		// Only normalize extensions for images that were actually compressed to JPEG
-		finalMimeType = JPEG_MIME_TYPE
-		finalFilename = changeExtensionToJPG(handler.Filename)
-		log.Printf("Normalizing compressed image filename: %s -> %s", handler.Filename, finalFilename)
-	} else if wasImageProcessed && actuallyCompressed {
-		// Image was compressed but keep original filename
-		finalFilename = handler.Filename
-		finalMimeType = JPEG_MIME_TYPE  // Fix MIME type since content is JPEG
-		log.Printf("Image compressed to JPEG but keeping filename: %s", finalFilename)
+
+	// Determine target format and MIME type
+	convertFormat := settingsString[CONVERT_TO_FORMAT]
+
+	if wasImageProcessed && actuallyCompressed {
+		// Image was converted to a new format
+		switch convertFormat {
+		case "JPEG":
+			finalMimeType = JPEG_MIME_TYPE
+			if settingsInt[NORMALIZE_EXTENSIONS] == 1 {
+				finalFilename = changeExtensionToJPG(handler.Filename)
+				log.Printf("Converted to JPEG with normalized filename: %s -> %s", handler.Filename, finalFilename)
+			} else {
+				finalFilename = handler.Filename
+				log.Printf("Converted to JPEG but keeping original filename: %s", finalFilename)
+			}
+		case "WEBP":
+			finalMimeType = WEBP_MIME_TYPE
+			if settingsInt[NORMALIZE_EXTENSIONS] == 1 {
+				finalFilename = changeExtensionToWebP(handler.Filename)
+				log.Printf("Converted to WebP with normalized filename: %s -> %s", handler.Filename, finalFilename)
+			} else {
+				finalFilename = handler.Filename
+				log.Printf("Converted to WebP but keeping original filename: %s", finalFilename)
+			}
+		default:
+			// Fallback (shouldn't happen)
+			finalMimeType = JPEG_MIME_TYPE
+			finalFilename = handler.Filename
+			log.Printf("Unknown convert format, defaulting to JPEG MIME: %s", finalFilename)
+		}
 	} else if wasImageProcessed && !actuallyCompressed {
-		// Image was processed but original was kept (compression didn't help)
+		// Image was processed but original format was kept (compression didn't help or conversion disabled)
 		finalFilename = handler.Filename
 		finalMimeType = handler.Header.Get("Content-Type")
 		if finalMimeType == "" {
 			finalMimeType = DEFAULT_MIME_TYPE
 		}
-		log.Printf("Image processed but original kept (better compression): %s (%s)", finalFilename, finalMimeType)
+		if convertFormat == "" {
+			log.Printf("Image resized but format conversion disabled: %s (%s)", finalFilename, finalMimeType)
+		} else {
+			log.Printf("Image processed but original kept (better compression): %s (%s)", finalFilename, finalMimeType)
+		}
 	} else {
 		// Not an image or processing failed - keep everything original
 		finalFilename = handler.Filename
@@ -308,7 +356,7 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request) (string, *bytes.B
 		if finalMimeType == "" {
 			finalMimeType = DEFAULT_MIME_TYPE
 		}
-		log.Printf("Non-image file, keeping original: %s (%s)", finalFilename, finalMimeType)
+		log.Printf("Non-image file or processing failed, keeping original: %s (%s)", finalFilename, finalMimeType)
 	}
 
 	fw, _ := CreateFormFileWithMime(writer, settingsString[FILE_UPLOAD_FIELD], finalFilename, finalMimeType)
@@ -330,15 +378,30 @@ func escapeQuotes(s string) string {
 // This function is only called for valid image files that have been successfully processed
 func changeExtensionToJPG(filename string) string {
 	extension := filepath.Ext(filename)
-	
-	// Handle files with no extension 
+
+	// Handle files with no extension
 	if extension == "" {
 		return filename + ".JPG"
 	}
-	
+
 	// Handle files with extension - replace the extension
 	nameWithoutExt := strings.TrimSuffix(filename, extension)
 	return nameWithoutExt + ".JPG"
+}
+
+// changeExtensionToWebP changes the file extension to .WEBP
+// This function is only called for valid image files that have been successfully processed
+func changeExtensionToWebP(filename string) string {
+	extension := filepath.Ext(filename)
+
+	// Handle files with no extension
+	if extension == "" {
+		return filename + ".WEBP"
+	}
+
+	// Handle files with extension - replace the extension
+	nameWithoutExt := strings.TrimSuffix(filename, extension)
+	return nameWithoutExt + ".WEBP"
 }
 
 func CreateFormFileWithMime(w *multipart.Writer, fieldname, filename, mimeType string) (io.Writer, error) {
@@ -390,8 +453,32 @@ func copyHeader(dst, src http.Header) {
 	}
 }
 
+// detectImageTransparency checks if an image has an alpha channel using bimg metadata
+func detectImageTransparency(imageData []byte) (bool, error) {
+	image := bimg.NewImage(imageData)
+	metadata, err := image.Metadata()
+	if err != nil {
+		return false, err
+	}
+	return metadata.Alpha, nil
+}
+
 // processImageWithStrategy processes an image according to the given settings
 func processImageWithStrategy(originalData []byte, settings ImageProcessingSettings) (*ImageProcessingResult, error) {
+	// Early transparency detection - skip any format conversion if image has transparency
+	convertFormat := settingsString[CONVERT_TO_FORMAT]
+	if convertFormat != "" {
+		hasTransparency, err := detectImageTransparency(originalData)
+		if err == nil && hasTransparency {
+			log.Printf("Skipping %s conversion - image has transparency", convertFormat)
+			return &ImageProcessingResult{
+				ProcessedData:   originalData,
+				WasCompressed:   false,
+				ProcessingError: nil,
+			}, nil
+		}
+	}
+
 	// Handle EXIF orientation first - this gives us the corrected image and bytes
 	workingImage, rotatedData, err := handleEXIFOrientation(originalData)
 	if err != nil {
@@ -401,7 +488,7 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 			ProcessingError: err,
 		}, err
 	}
-	
+
 	// Get size from properly oriented image
 	oldImageSize, err := workingImage.Size()
 	if err != nil {
@@ -411,38 +498,98 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 			ProcessingError: err,
 		}, err
 	}
-	
+
 	// Calculate resize dimensions
 	newDimensions := calculateResizeDimensions(
 		ImageSize{Width: oldImageSize.Width, Height: oldImageSize.Height},
 		settings,
 	)
-	
-	// Process the image
+
+	// Check if format conversion is enabled (reuse convertFormat from earlier)
+	if convertFormat == "" {
+		// No format conversion - just resize if needed (backwards compatible behavior)
+		needsResize := newDimensions.Width != oldImageSize.Width || newDimensions.Height != oldImageSize.Height
+		if !needsResize {
+			// No processing needed
+			return &ImageProcessingResult{
+				ProcessedData:   rotatedData,
+				WasCompressed:   false,
+				NewDimensions:   ImageSize{Width: oldImageSize.Width, Height: oldImageSize.Height},
+				ProcessingError: nil,
+			}, nil
+		}
+
+		// Resize only (preserve original format)
+		options := bimg.Options{
+			Width:  newDimensions.Width,
+			Height: newDimensions.Height,
+		}
+
+		processedData, err := workingImage.Process(options)
+		if err != nil {
+			return &ImageProcessingResult{
+				ProcessedData:   rotatedData,
+				WasCompressed:   false,
+				NewDimensions:   ImageSize{Width: oldImageSize.Width, Height: oldImageSize.Height},
+				ProcessingError: err,
+			}, err
+		}
+
+		return &ImageProcessingResult{
+			ProcessedData: processedData,
+			WasCompressed: false, // We didn't change format, just resized
+			NewDimensions: newDimensions,
+		}, nil
+	}
+
+	// Format conversion is enabled - process the image with format conversion
+	var targetType bimg.ImageType
+	var quality int
+
+	switch convertFormat {
+	case "JPEG":
+		targetType = bimg.JPEG
+		quality = settings.JpegQuality
+	case "WEBP":
+		targetType = bimg.WEBP
+		quality = settingsInt[WEBP_QUALITY]
+	default:
+		// Shouldn't happen due to validation, but fallback to JPEG
+		targetType = bimg.JPEG
+		quality = settings.JpegQuality
+	}
+
 	options := bimg.Options{
 		Width:   newDimensions.Width,
 		Height:  newDimensions.Height,
-		Quality: settings.JpegQuality,
-		Type:    bimg.JPEG,
+		Quality: quality,
+		Type:    targetType,
 	}
-	
+
+	// Note: WebP transparency fallback is now handled in early detection phase
+
 	processedData, err := workingImage.Process(options)
 	if err != nil {
 		return &ImageProcessingResult{
-			ProcessedData:   rotatedData,  // Return rotated data even if JPEG processing fails
+			ProcessedData:   rotatedData,  // Return rotated data even if processing fails
 			WasCompressed:   false,
 			NewDimensions:   ImageSize{Width: oldImageSize.Width, Height: oldImageSize.Height},
 			ProcessingError: err,
 		}, err
 	}
-	
-	// Determine if compression was beneficial compared to rotated data
+
+	// Only use converted data if it's actually smaller (the whole point of conversion is optimization)
 	wasCompressed := len(processedData) < len(rotatedData)
-	finalData := rotatedData  // Use rotated data as baseline (preserves EXIF rotation)
+	
+	var finalData []byte
 	if wasCompressed {
 		finalData = processedData
+		log.Printf("Conversion to %s successful: %d → %d bytes", convertFormat, len(rotatedData), len(processedData))
+	} else {
+		finalData = rotatedData  // Use rotated data (preserves EXIF rotation)
+		log.Printf("Conversion to %s skipped - would increase size: %d → %d bytes", convertFormat, len(rotatedData), len(processedData))
 	}
-	
+
 	return &ImageProcessingResult{
 		ProcessedData: finalData,
 		WasCompressed: wasCompressed,
@@ -456,7 +603,7 @@ func handleEXIFOrientation(originalData []byte) (*bimg.Image, []byte, error) {
 	image := bimg.NewImage(originalData)
 	metadata, err := image.Metadata()
 	needsRotation := err == nil && metadata.Orientation > EXIF_ORIENTATION_NORMAL
-	
+
 	if needsRotation {
 		log.Println("EXIF orientation detected, applying rotation")
 		rotatedBytes, err := image.AutoRotate()
@@ -466,7 +613,7 @@ func handleEXIFOrientation(originalData []byte) (*bimg.Image, []byte, error) {
 		}
 		return bimg.NewImage(rotatedBytes), rotatedBytes, nil
 	}
-	
+
 	return image, originalData, nil
 }
 
@@ -484,11 +631,11 @@ func calculateNarrowSideResize(original ImageSize, maxNarrowSide int) ImageSize 
 	if original.Height < original.Width {
 		narrowSide = original.Height
 	}
-	
+
 	if narrowSide <= maxNarrowSide {
 		return original // No resize needed
 	}
-	
+
 	scale := float64(maxNarrowSide) / float64(narrowSide)
 	return ImageSize{
 		Width:  int(float64(original.Width) * scale),
@@ -501,16 +648,16 @@ func calculateBoundingBoxResize(original ImageSize, maxWidth, maxHeight int) Ima
 	if original.Width <= maxWidth && original.Height <= maxHeight {
 		return original // No resize needed
 	}
-	
+
 	scaleWidth := float64(maxWidth) / float64(original.Width)
 	scaleHeight := float64(maxHeight) / float64(original.Height)
-	
+
 	// Use the smaller scale factor to ensure both dimensions fit
 	scale := scaleWidth
 	if scaleHeight < scaleWidth {
 		scale = scaleHeight
 	}
-	
+
 	return ImageSize{
 		Width:  int(float64(original.Width) * scale),
 		Height: int(float64(original.Height) * scale),

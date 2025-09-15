@@ -41,14 +41,27 @@ For example, with `IMG_MAX_NARROW_SIDE=600`:
 - A 2000x800 landscape image becomes 1500x600 (narrow side constrained to 600)
 - A 800x2000 portrait image becomes 600x1500 (narrow side constrained to 600)
 
-### File Extension Normalization
+### Format Conversion
 
-The proxy attempts to compress images to JPEG format, but only uses the compressed version if it results in a smaller file size. For successfully compressed images, you can choose whether to normalize file extensions:
+The proxy can convert images to different formats for optimization:
 
-- **Enabled** (`NORMALIZE_EXTENSIONS=1`, default): When compression is beneficial, `photo.png` → `photo.JPG`, `image.heic` → `image.JPG`
-- **Disabled** (`NORMALIZE_EXTENSIONS=0`): Keep original filenames even for compressed images
+#### Format Selection
+- **Disabled** (`CONVERT_TO_FORMAT=""`, default): Resize images without format conversion (backward compatible)
+- **JPEG** (`CONVERT_TO_FORMAT="JPEG"`): Convert images to JPEG format
+- **WebP** (`CONVERT_TO_FORMAT="WEBP"`): Convert images to WebP format
 
-When compression doesn't reduce file size, the original image format and filename are preserved to maintain quality and avoid unnecessary format conversion.
+#### Transparency Handling
+When converting images with transparency:
+- **Any format conversion**: Transparent images are skipped entirely to preserve transparency
+- **Rationale**: JPEG doesn't support transparency, and WebP loses alpha channel with current libvips/bimg setup
+
+#### File Extension Normalization
+For successfully converted images, you can choose whether to normalize file extensions:
+
+- **Enabled** (`NORMALIZE_EXTENSIONS=1`, default): When conversion happens, `photo.png` → `photo.JPG` or `photo.WEBP`
+- **Disabled** (`NORMALIZE_EXTENSIONS=0`): Keep original filenames even for converted images
+
+When conversion doesn't reduce file size, the original image format and filename are preserved to maintain quality.
 
 ## Environment variables
 
@@ -57,11 +70,13 @@ When compression doesn't reduce file size, the original image format and filenam
 |`IMG_MAX_WIDTH`            |1920            | Pixels, keeps aspect ratio (ignored if IMG_MAX_NARROW_SIDE is set)
 |`IMG_MAX_HEIGHT`            |1080            | Pixels, keeps aspect ratio (ignored if IMG_MAX_NARROW_SIDE is set)
 |`IMG_MAX_NARROW_SIDE`      |0 (disabled)    | Pixels, constrains the narrow side of the image, allows wide side to be larger
-|`JPEG_QUALITY`|75|JPEG compression quality (1-100, lower = smaller file). Invalid values fall back to default
-|`NORMALIZE_EXTENSIONS`|1 (enabled)|Normalize filenames to .JPG extension (1=enabled, 0=keep original names). Invalid values fall back to default
+|`JPEG_QUALITY`|90|JPEG compression quality (1-100, lower = smaller file). Invalid values fall back to default
+|`WEBP_QUALITY`|85|WebP compression quality (1-100, lower = smaller file). Invalid values fall back to default
+|`CONVERT_TO_FORMAT`|"" (disabled)|Format conversion: "" (disabled), "JPEG", or "WEBP". Transparent images may fallback to PNG
+|`NORMALIZE_EXTENSIONS`|1 (enabled)|Normalize filenames to converted format extension (1=enabled, 0=keep original names). Invalid values fall back to default
 |`UPLOAD_MAX_SIZE`|104857600|Maximum form size in bytes
 |`IMG_MAX_PIXELS`|2073600|If the images width*height (in pixels) doesn't exceed this value, don't resize. Defaults to IMG_MAX_WIDTH × IMG_MAX_HEIGHT
-|`FORWARD_DESTINATION`|https://httpbin.org/post|Where should the result be sent to
+|`FORWARD_DESTINATION`|https://httpbin.org/anything|Where should the result be sent to
 |`FILE_UPLOAD_FIELD`|assetData|Name of the file field to potentially resize
 |`LISTEN_PATH`|/api/assets|Path used to process file uploads
 
