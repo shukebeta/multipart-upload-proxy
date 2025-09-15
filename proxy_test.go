@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -100,45 +99,21 @@ func createTestPNG(width, height int) ([]byte, error) {
 
 // TestJPEGQualityEnvironmentVariable tests that JPEG_QUALITY is properly loaded
 func TestJPEGQualityEnvironmentVariable(t *testing.T) {
-	// Clean up any existing settings
-	settingsInt = make(map[string]int)
-
 	// Test default value
 	os.Unsetenv("JPEG_QUALITY")
-	defaultSettingsInt := map[string]int{
-		IMG_MAX_WIDTH:       DEFAULT_IMG_MAX_WIDTH,
-		IMG_MAX_HEIGHT:      DEFAULT_IMG_MAX_HEIGHT,
-		IMG_MAX_NARROW_SIDE: DEFAULT_IMG_MAX_NARROW_SIDE,
-		JPEG_QUALITY:        DEFAULT_JPEG_QUALITY,
-	}
-
-	intKeys := []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY}
-	for _, intKey := range intKeys {
-		settingsInt[intKey] = defaultSettingsInt[intKey]
-
-		envValue := os.Getenv(intKey)
-		if len(envValue) > 0 {
-			if convEnvValue, err := strconv.Atoi(envValue); err == nil {
-				settingsInt[intKey] = convEnvValue
-			}
-		}
-	}
-
-	if settingsInt[JPEG_QUALITY] != DEFAULT_JPEG_QUALITY {
-		t.Errorf("Expected default JPEG_QUALITY to be %d, got %d", DEFAULT_JPEG_QUALITY, settingsInt[JPEG_QUALITY])
+	cfg := NewConfigFromEnv()
+	
+	if cfg.JpegQuality != DEFAULT_JPEG_QUALITY {
+		t.Errorf("Expected default JPEG_QUALITY to be %d, got %d", DEFAULT_JPEG_QUALITY, cfg.JpegQuality)
 	}
 
 	// Test custom value
 	os.Setenv("JPEG_QUALITY", "50")
-	envValue := os.Getenv(JPEG_QUALITY)
-	if len(envValue) > 0 {
-		if convEnvValue, err := strconv.Atoi(envValue); err == nil {
-			settingsInt[JPEG_QUALITY] = convEnvValue
-		}
-	}
+	defer os.Unsetenv("JPEG_QUALITY")
+	cfg = NewConfigFromEnv()
 
-	if settingsInt[JPEG_QUALITY] != 50 {
-		t.Errorf("Expected JPEG_QUALITY to be 50, got %d", settingsInt[JPEG_QUALITY])
+	if cfg.JpegQuality != 50 {
+		t.Errorf("Expected JPEG_QUALITY to be 50, got %d", cfg.JpegQuality)
 	}
 }
 
@@ -153,26 +128,20 @@ func TestJPEGQualityBoundaries(t *testing.T) {
 		{"100", 100, "maximum quality"},
 		{"30", 30, "low quality"},
 		{"95", 95, "high quality"},
-		{"invalid", 75, "invalid value should use default"},
-		{"0", 0, "zero quality"},
-		{"101", 101, "above maximum"},
+		{"invalid", DEFAULT_JPEG_QUALITY, "invalid value should use default"},
+		{"0", DEFAULT_JPEG_QUALITY, "zero quality should use default"},
+		{"101", DEFAULT_JPEG_QUALITY, "above maximum should use default"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			settingsInt = make(map[string]int)
-			settingsInt[JPEG_QUALITY] = 75 // default
-
 			os.Setenv("JPEG_QUALITY", tc.envValue)
-			envValue := os.Getenv(JPEG_QUALITY)
-			if len(envValue) > 0 {
-				if convEnvValue, err := strconv.Atoi(envValue); err == nil {
-					settingsInt[JPEG_QUALITY] = convEnvValue
-				}
-			}
+			defer os.Unsetenv("JPEG_QUALITY")
+			
+			cfg := NewConfigFromEnv()
 
-			if settingsInt[JPEG_QUALITY] != tc.expected {
-				t.Errorf("For %s, expected %d, got %d", tc.name, tc.expected, settingsInt[JPEG_QUALITY])
+			if cfg.JpegQuality != tc.expected {
+				t.Errorf("For %s, expected %d, got %d", tc.name, tc.expected, cfg.JpegQuality)
 			}
 		})
 	}
@@ -185,43 +154,32 @@ func TestBackwardCompatibility(t *testing.T) {
 	// Test that the proxy still works without JPEG_QUALITY set
 	os.Unsetenv("JPEG_QUALITY")
 
-	// Initialize settings as main() would
-	settingsInt = make(map[string]int)
-	defaultSettingsInt := map[string]int{
-		IMG_MAX_WIDTH:       1920,
-		IMG_MAX_HEIGHT:      1080,
-		IMG_MAX_NARROW_SIDE: 0, // Should have default even if not set
-		JPEG_QUALITY:        75, // Should have default even if not set
-	}
+	// Use Config system as main() now does
+	cfg := NewConfigFromEnv()
 
-	intKeys := []string{IMG_MAX_WIDTH, IMG_MAX_HEIGHT, IMG_MAX_NARROW_SIDE, JPEG_QUALITY}
-	for _, intKey := range intKeys {
-		settingsInt[intKey] = defaultSettingsInt[intKey]
-
-		envValue := os.Getenv(intKey)
-		if len(envValue) > 0 {
-			if convEnvValue, err := strconv.Atoi(envValue); err == nil {
-				settingsInt[intKey] = convEnvValue
-			}
-		}
+	// Verify all expected settings have proper defaults
+	if cfg.ImgMaxWidth == 0 {
+		t.Error("IMG_MAX_WIDTH should have a default value")
 	}
-
-	// Verify all expected settings are available
-	if _, exists := settingsInt[IMG_MAX_WIDTH]; !exists {
-		t.Error("IMG_MAX_WIDTH should be available for backward compatibility")
+	if cfg.ImgMaxHeight == 0 {
+		t.Error("IMG_MAX_HEIGHT should have a default value")
 	}
-	if _, exists := settingsInt[IMG_MAX_HEIGHT]; !exists {
-		t.Error("IMG_MAX_HEIGHT should be available for backward compatibility")
+	if cfg.JpegQuality == 0 {
+		t.Error("JPEG_QUALITY should have a default value")
 	}
-	if _, exists := settingsInt[JPEG_QUALITY]; !exists {
-		t.Error("JPEG_QUALITY should have default value for backward compatibility")
+	
+	// Verify environment variables override defaults
+	os.Setenv("JPEG_QUALITY", "50")
+	defer os.Unsetenv("JPEG_QUALITY")
+	cfg = NewConfigFromEnv()
+	
+	if cfg.JpegQuality != 50 {
+		t.Errorf("JPEG_QUALITY should be overridden by env var, got %d, expected 50", cfg.JpegQuality)
 	}
 }
 
 // TestImageProcessingWithQuality tests actual image processing with different quality settings
 func TestImageProcessingWithQuality(t *testing.T) {
-	setupTestEnvironment()
-
 	// Load the PNG test image file to test format conversion
 	originalImage, err := bimg.Read("HappyNotes.png")
 	if err != nil {
@@ -251,22 +209,21 @@ func TestImageProcessingWithQuality(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Initialize settings for this quality level
-			settingsInt = make(map[string]int)
-			settingsInt[IMG_MAX_WIDTH] = 800
-			settingsInt[IMG_MAX_HEIGHT] = 600
-			settingsInt[IMG_MAX_NARROW_SIDE] = 0 // Use original bounding box logic
-			settingsInt[JPEG_QUALITY] = tc.quality
-
-			settingsInt64 = make(map[string]int64)
-			settingsInt64[IMG_MAX_PIXELS] = int64(settingsInt[IMG_MAX_WIDTH]) * int64(settingsInt[IMG_MAX_HEIGHT])
+			// Create Config for this quality level instead of using global variables
+			cfg := &Config{
+				ImgMaxWidth:      800,
+				ImgMaxHeight:     600,
+				ImgMaxNarrowSide: 0, // Use original bounding box logic
+				JpegQuality:      tc.quality,
+				ImgMaxPixels:     800 * 600,
+			}
 
 			oldImagePX := int64(oldImageSize.Width * oldImageSize.Height)
-			if oldImagePX > settingsInt64[IMG_MAX_PIXELS] {
+			if oldImagePX > cfg.ImgMaxPixels {
 				// Use the same logic as in reformatMultipart for consistency
 				var newWidth, newHeight int
-				scaleWidth := float64(settingsInt[IMG_MAX_WIDTH]) / float64(oldImageSize.Width)
-				scaleHeight := float64(settingsInt[IMG_MAX_HEIGHT]) / float64(oldImageSize.Height)
+				scaleWidth := float64(cfg.ImgMaxWidth) / float64(oldImageSize.Width)
+				scaleHeight := float64(cfg.ImgMaxHeight) / float64(oldImageSize.Height)
 
 				// Use the smaller scale factor to ensure both dimensions fit
 				scale := scaleWidth
@@ -281,7 +238,7 @@ func TestImageProcessingWithQuality(t *testing.T) {
 				options := bimg.Options{
 					Width:   newWidth,
 					Height:  newHeight,
-					Quality: settingsInt[JPEG_QUALITY],
+					Quality: cfg.JpegQuality,
 					Type:    bimg.JPEG,
 				}
 
@@ -302,9 +259,9 @@ func TestImageProcessingWithQuality(t *testing.T) {
 					t.Fatalf("Failed to get processed image size: %v", err)
 				}
 
-				if processedSize.Width > settingsInt[IMG_MAX_WIDTH] || processedSize.Height > settingsInt[IMG_MAX_HEIGHT] {
+				if processedSize.Width > cfg.ImgMaxWidth || processedSize.Height > cfg.ImgMaxHeight {
 					t.Errorf("Image not properly resized: %dx%d (should fit within %dx%d)",
-						processedSize.Width, processedSize.Height, settingsInt[IMG_MAX_WIDTH], settingsInt[IMG_MAX_HEIGHT])
+						processedSize.Width, processedSize.Height, cfg.ImgMaxWidth, cfg.ImgMaxHeight)
 				}
 
 				results[tc.quality] = len(newByteContainer)
@@ -340,22 +297,17 @@ func TestImageProcessingWithQuality(t *testing.T) {
 
 // TestMultipartFormProcessing tests the complete multipart form processing
 func TestMultipartFormProcessing(t *testing.T) {
-	setupTestEnvironment()
-
-	// Initialize global variables as main() would
-	settingsInt = make(map[string]int)
-	settingsInt[IMG_MAX_WIDTH] = 800
-	settingsInt[IMG_MAX_HEIGHT] = 600
-	settingsInt[IMG_MAX_NARROW_SIDE] = 0 // Use original bounding box logic
-	settingsInt[JPEG_QUALITY] = 30 // Use low quality for testing
-
-	settingsInt64 = make(map[string]int64)
-	settingsInt64[UPLOAD_MAX_SIZE] = 100 << 20 // 100MB
-	settingsInt64[IMG_MAX_PIXELS] = int64(settingsInt[IMG_MAX_WIDTH]) * int64(settingsInt[IMG_MAX_HEIGHT])
-
-	settingsString = make(map[string]string)
-	settingsString[FILE_UPLOAD_FIELD] = "assetData"
-	settingsString[FORWARD_DESTINATION] = "http://test.example.com/api/assets"
+	// Create Config instead of using global variables
+	cfg := &Config{
+		FileUploadField:    "assetData",
+		ForwardDestination: "http://test.example.com/api/assets",
+		ImgMaxWidth:        800,
+		ImgMaxHeight:       600,
+		ImgMaxNarrowSide:   0, // Use original bounding box logic
+		JpegQuality:        30, // Use low quality for testing
+		UploadMaxSize:      100 << 20, // 100MB
+		ImgMaxPixels:       800 * 600,
+	}
 
 	// Load the test image file
 	testJPEG, err := bimg.Read("Norway.jpeg")
@@ -436,15 +388,15 @@ func TestMultipartFormProcessing(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	// Update settings to point to test server
-	settingsString[FORWARD_DESTINATION] = testServer.URL + "/api/assets"
+	// Update config to point to test server
+	cfg.ForwardDestination = testServer.URL + "/api/assets"
 
 	// Test would require more complex setup to fully test the HTTP proxy behavior
 	// For now, we'll test the core image processing logic
 
 	// Parse the multipart form manually to test reformatMultipart logic
-	req.ParseMultipartForm(settingsInt64[UPLOAD_MAX_SIZE])
-	file, handler, err := req.FormFile(settingsString[FILE_UPLOAD_FIELD])
+	req.ParseMultipartForm(cfg.UploadMaxSize)
+	file, handler, err := req.FormFile(cfg.FileUploadField)
 	if err != nil {
 		t.Fatalf("Failed to get form file: %v", err)
 	}
@@ -524,11 +476,12 @@ func benchmarkImageProcessing(b *testing.B, quality int) {
 
 // TestNarrowSideConstraint tests the new IMG_MAX_NARROW_SIDE functionality
 func TestNarrowSideConstraint(t *testing.T) {
-	// Initialize settings
-	settingsInt = make(map[string]int)
-	settingsInt[IMG_MAX_WIDTH] = 1920
-	settingsInt[IMG_MAX_HEIGHT] = 1080
-	settingsInt[JPEG_QUALITY] = 75
+	// Base config for testing - each test case will modify narrow side setting
+	baseCfg := &Config{
+		ImgMaxWidth:      1920,
+		ImgMaxHeight:     1080,
+		JpegQuality:      75,
+	}
 
 	testCases := []struct {
 		name          string
@@ -571,8 +524,9 @@ func TestNarrowSideConstraint(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Logf("Testing: %s", tc.description)
 
-			// Set narrow side constraint
-			settingsInt[IMG_MAX_NARROW_SIDE] = tc.narrowSide
+			// Create config with narrow side constraint for this test case
+			cfg := *baseCfg // Copy base config
+			cfg.ImgMaxNarrowSide = tc.narrowSide
 
 			// Load the test image directly
 			testImage, err := bimg.Read(tc.imageFile)
@@ -597,13 +551,13 @@ func TestNarrowSideConstraint(t *testing.T) {
 				actualNarrowSide = oldImageSize.Height
 			}
 
-			if settingsInt[IMG_MAX_NARROW_SIDE] > 0 {
+			if cfg.ImgMaxNarrowSide > 0 {
 				// Use narrow side strategy
-				needsResize = actualNarrowSide > settingsInt[IMG_MAX_NARROW_SIDE]
+				needsResize = actualNarrowSide > cfg.ImgMaxNarrowSide
 
 				if needsResize {
 					// Calculate scale factor based on narrow side
-					scale := float64(settingsInt[IMG_MAX_NARROW_SIDE]) / float64(actualNarrowSide)
+					scale := float64(cfg.ImgMaxNarrowSide) / float64(actualNarrowSide)
 
 					newWidth = int(float64(oldImageSize.Width) * scale)
 					newHeight = int(float64(oldImageSize.Height) * scale)
@@ -638,7 +592,7 @@ func TestNarrowSideConstraint(t *testing.T) {
 				options := bimg.Options{
 					Width:   newWidth,
 					Height:  newHeight,
-					Quality: settingsInt[JPEG_QUALITY],
+					Quality: cfg.JpegQuality,
 					Type:    bimg.JPEG,
 				}
 
@@ -674,10 +628,11 @@ func TestNarrowSideConstraint(t *testing.T) {
 
 // TestNarrowSidePriorityOverBoundingBox tests that narrow side takes priority over width/height limits
 func TestNarrowSidePriorityOverBoundingBox(t *testing.T) {
-	settingsInt = make(map[string]int)
-	settingsInt[IMG_MAX_WIDTH] = 500  // Make smaller than Norway's width (640)
-	settingsInt[IMG_MAX_HEIGHT] = 400 // Make smaller than Norway's height (426)
-	settingsInt[JPEG_QUALITY] = 75
+	cfg := &Config{
+		ImgMaxWidth:  500, // Make smaller than Norway's width (640)
+		ImgMaxHeight: 400, // Make smaller than Norway's height (426)
+		JpegQuality:  75,
+	}
 
 	// Use Norway.jpeg: 640x426 (narrow side = 426, exceeds both width and height limits)
 	testImage, err := bimg.Read("Norway.jpeg")
@@ -692,13 +647,13 @@ func TestNarrowSidePriorityOverBoundingBox(t *testing.T) {
 	}
 
 	// Test 1: Without narrow side constraint (should use bounding box)
-	settingsInt[IMG_MAX_NARROW_SIDE] = 0
+	cfg.ImgMaxNarrowSide = 0
 
 	var newWidth1, newHeight1 int
-	needsResize1 := oldImageSize.Width > settingsInt[IMG_MAX_WIDTH] || oldImageSize.Height > settingsInt[IMG_MAX_HEIGHT]
+	needsResize1 := oldImageSize.Width > cfg.ImgMaxWidth || oldImageSize.Height > cfg.ImgMaxHeight
 	if needsResize1 {
-		scaleWidth := float64(settingsInt[IMG_MAX_WIDTH]) / float64(oldImageSize.Width)
-		scaleHeight := float64(settingsInt[IMG_MAX_HEIGHT]) / float64(oldImageSize.Height)
+		scaleWidth := float64(cfg.ImgMaxWidth) / float64(oldImageSize.Width)
+		scaleHeight := float64(cfg.ImgMaxHeight) / float64(oldImageSize.Height)
 
 		scale := scaleWidth
 		if scaleHeight < scaleWidth {
@@ -710,7 +665,7 @@ func TestNarrowSidePriorityOverBoundingBox(t *testing.T) {
 	}
 
 	// Test 2: With narrow side constraint (should ignore bounding box)
-	settingsInt[IMG_MAX_NARROW_SIDE] = 450 // Larger than narrow side of 426
+	cfg.ImgMaxNarrowSide = 450 // Larger than narrow side of 426
 
 	var newWidth2, newHeight2 int
 	narrowSide := oldImageSize.Width
@@ -718,9 +673,9 @@ func TestNarrowSidePriorityOverBoundingBox(t *testing.T) {
 		narrowSide = oldImageSize.Height
 	}
 
-	needsResize2 := narrowSide > settingsInt[IMG_MAX_NARROW_SIDE]
+	needsResize2 := narrowSide > cfg.ImgMaxNarrowSide
 	if needsResize2 {
-		scale := float64(settingsInt[IMG_MAX_NARROW_SIDE]) / float64(narrowSide)
+		scale := float64(cfg.ImgMaxNarrowSide) / float64(narrowSide)
 		newWidth2 = int(float64(oldImageSize.Width) * scale)
 		newHeight2 = int(float64(oldImageSize.Height) * scale)
 	} else {
@@ -752,11 +707,12 @@ func TestNarrowSidePriorityOverBoundingBox(t *testing.T) {
 
 // TestEXIFOrientationHandling tests that EXIF orientation is properly handled
 func TestEXIFOrientationHandling(t *testing.T) {
-	settingsInt = make(map[string]int)
-	settingsInt[IMG_MAX_WIDTH] = 800
-	settingsInt[IMG_MAX_HEIGHT] = 600
-	settingsInt[IMG_MAX_NARROW_SIDE] = 500
-	settingsInt[JPEG_QUALITY] = 75
+	cfg := &Config{
+		ImgMaxWidth:      800,
+		ImgMaxHeight:     600,
+		ImgMaxNarrowSide: 500,
+		JpegQuality:      75,
+	}
 
 	// This test verifies that our narrow side detection works correctly
 	// even when images have EXIF orientation data that might rotate them
@@ -789,8 +745,8 @@ func TestEXIFOrientationHandling(t *testing.T) {
 
 	t.Logf("Image size after EXIF handling: %dx%d", oldImageSize.Width, oldImageSize.Height)
 
-	// Verify the narrow side logic still works
-	narrowSideLimit := 500
+	// Verify the narrow side logic still works using Config
+	narrowSideLimit := cfg.ImgMaxNarrowSide
 	narrowSide := oldImageSize.Width
 	if oldImageSize.Height < oldImageSize.Width {
 		narrowSide = oldImageSize.Height
@@ -804,7 +760,7 @@ func TestEXIFOrientationHandling(t *testing.T) {
 		options := bimg.Options{
 			Width:   newWidth,
 			Height:  newHeight,
-			Quality: 75,
+			Quality: cfg.JpegQuality,
 			Type:    bimg.JPEG,
 		}
 
@@ -864,23 +820,32 @@ func TestExtensionNormalization(t *testing.T) {
 
 // TestNormalizationConfiguration tests the NORMALIZE_EXTENSIONS setting
 func TestNormalizationConfiguration(t *testing.T) {
-	// This would require more complex setup to test the full multipart processing
-	// For now, just test that the configuration is properly loaded
-
-	settingsInt = make(map[string]int)
-
-	// Test default behavior (normalization enabled)
-	settingsInt[NORMALIZE_EXTENSIONS] = 1
-	if settingsInt[NORMALIZE_EXTENSIONS] != 1 {
-		t.Error("NORMALIZE_EXTENSIONS should default to 1 (enabled)")
+	// Test normalization configuration using Config struct (no global dependencies)
+	
+	// Test default behavior (normalization should be enabled by default)
+	os.Unsetenv("NORMALIZE_EXTENSIONS") // Clear to test default
+	cfg := NewConfigFromEnv()
+	expectedDefault := DEFAULT_NORMALIZE_EXTENSIONS == 1
+	if cfg.NormalizeExt != expectedDefault {
+		t.Errorf("NORMALIZE_EXTENSIONS default should be %t, got %t", expectedDefault, cfg.NormalizeExt)
 	}
-
+	
 	// Test disabled
-	settingsInt[NORMALIZE_EXTENSIONS] = 0
-	if settingsInt[NORMALIZE_EXTENSIONS] != 0 {
-		t.Error("NORMALIZE_EXTENSIONS should be configurable to 0 (disabled)")
+	os.Setenv("NORMALIZE_EXTENSIONS", "0")
+	cfg = NewConfigFromEnv()
+	if cfg.NormalizeExt != false {
+		t.Error("NORMALIZE_EXTENSIONS should be configurable to false (disabled)")
 	}
-
+	
+	// Test enabled
+	os.Setenv("NORMALIZE_EXTENSIONS", "1")
+	cfg = NewConfigFromEnv()
+	if cfg.NormalizeExt != true {
+		t.Error("NORMALIZE_EXTENSIONS should be configurable to true (enabled)")
+	}
+	
+	// Clean up
+	os.Unsetenv("NORMALIZE_EXTENSIONS")
 	t.Log("Extension normalization configuration test passed")
 }
 
@@ -981,28 +946,29 @@ func TestNonImageFileHandling(t *testing.T) {
 
 // TestNarrowSideBackwardCompatibility tests that not setting narrow side uses original logic
 func TestNarrowSideBackwardCompatibility(t *testing.T) {
-	settingsInt = make(map[string]int)
-	settingsInt[IMG_MAX_WIDTH] = 800
-	settingsInt[IMG_MAX_HEIGHT] = 600
-	settingsInt[IMG_MAX_NARROW_SIDE] = 0 // Not set
-	settingsInt[JPEG_QUALITY] = 75
+	cfg := &Config{
+		ImgMaxWidth:      800,
+		ImgMaxHeight:     600,
+		ImgMaxNarrowSide: 0, // Not set
+		JpegQuality:      75,
+	}
 
 	// Test that the behavior is identical to before when IMG_MAX_NARROW_SIDE is 0
 	originalW, originalH := 1200, 800
 
 	// This should use the original bounding box logic
-	needsResize := originalW > settingsInt[IMG_MAX_WIDTH] || originalH > settingsInt[IMG_MAX_HEIGHT]
+	needsResize := originalW > cfg.ImgMaxWidth || originalH > cfg.ImgMaxHeight
 	if !needsResize {
 		t.Error("Should need resize with bounding box logic")
 	}
 
 	// Even though narrow side (800) would fit in typical narrow constraints,
 	// the bounding box logic should still apply
-	if settingsInt[IMG_MAX_NARROW_SIDE] > 0 {
+	if cfg.ImgMaxNarrowSide > 0 {
 		t.Error("Test setup error: IMG_MAX_NARROW_SIDE should be 0 for this test")
 	}
 
-	t.Logf("Backward compatibility verified: using bounding box when narrow side = %d", settingsInt[IMG_MAX_NARROW_SIDE])
+	t.Logf("Backward compatibility verified: using bounding box when narrow side = %d", cfg.ImgMaxNarrowSide)
 }
 
 // TestMIMEConsistencyWithBytes tests that MIME type matches actual byte content
@@ -1023,16 +989,8 @@ func TestMIMEConsistencyWithBytes(t *testing.T) {
 		t.Fatalf("Failed to create test PNG: %v", err)
 	}
 
-	// Initialize settings - force very high quality to make JPEG larger
-	settingsInt = make(map[string]int)
-	settingsInt[IMG_MAX_WIDTH] = 1920    // Large, so no resize needed
-	settingsInt[IMG_MAX_HEIGHT] = 1080   // Large, so no resize needed
-	settingsInt[IMG_MAX_NARROW_SIDE] = 0 // Use bounding box
-	settingsInt[JPEG_QUALITY] = 100      // Max quality = larger file
-	settingsInt[NORMALIZE_EXTENSIONS] = 1 // Enable extension normalization
-
-	settingsInt64 = make(map[string]int64)
-	settingsInt64[IMG_MAX_PIXELS] = int64(settingsInt[IMG_MAX_WIDTH]) * int64(settingsInt[IMG_MAX_HEIGHT])
+	// This test is already partially migrated, but let's clean up the remaining global variable usage
+	// The Config creation below already handles all the settings we need
 
 	// Create a multipart form
 	body := &bytes.Buffer{}
@@ -1056,12 +1014,22 @@ func TestMIMEConsistencyWithBytes(t *testing.T) {
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.ParseMultipartForm(32 << 20)
 
-	// Mock settings for reformatMultipart
-	settingsString = make(map[string]string)
-	settingsString[FILE_UPLOAD_FIELD] = "file"
+	// Create Config for reformatMultipart - migrated to direct values
+	cfg := &Config{
+		FileUploadField:   "file",
+		ImgMaxWidth:       1920,    // Large, so no resize needed
+		ImgMaxHeight:      1080,    // Large, so no resize needed
+		ImgMaxNarrowSide:  0,       // Use bounding box
+		JpegQuality:       100,     // Max quality = larger file
+		WebpQuality:       DEFAULT_WEBP_QUALITY,
+		NormalizeExt:      true,    // Enable extension normalization
+		UploadMaxSize:     int64(100 << 20), // 100MB
+		ConvertToFormat:   "",
+		ImgMaxPixels:      1920 * 1080,
+	}
 
 	// Call reformatMultipart
-	_, resultBody, err := reformatMultipart(httptest.NewRecorder(), req)
+	_, resultBody, err := reformatMultipart(httptest.NewRecorder(), req, cfg)
 	if err != nil {
 		t.Fatalf("reformatMultipart failed: %v", err)
 	}
@@ -1122,16 +1090,8 @@ func TestEXIFRotationPersistence(t *testing.T) {
 		t.Fatalf("Failed to create test image: %v", err)
 	}
 
-	// Initialize settings - large limits so no resize needed
-	settingsInt = make(map[string]int)
-	settingsInt[IMG_MAX_WIDTH] = 2000    // Large, so no resize needed
-	settingsInt[IMG_MAX_HEIGHT] = 2000   // Large, so no resize needed
-	settingsInt[IMG_MAX_NARROW_SIDE] = 0 // Use bounding box
-	settingsInt[JPEG_QUALITY] = 75
-	settingsInt[NORMALIZE_EXTENSIONS] = 0 // Keep original filename
-
-	settingsInt64 = make(map[string]int64)
-	settingsInt64[IMG_MAX_PIXELS] = int64(settingsInt[IMG_MAX_WIDTH]) * int64(settingsInt[IMG_MAX_HEIGHT])
+	// Initialize config - large limits so no resize needed
+	// Config creation below already handles all the settings we need
 
 	// Create multipart form
 	body := &bytes.Buffer{}
@@ -1153,10 +1113,6 @@ func TestEXIFRotationPersistence(t *testing.T) {
 	req := httptest.NewRequest("POST", "/upload", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.ParseMultipartForm(32 << 20)
-
-	// Mock settings
-	settingsString = make(map[string]string)
-	settingsString[FILE_UPLOAD_FIELD] = "file"
 
 	// Test the image processing directly for better control
 	file, handler, err := req.FormFile("file")
@@ -1183,8 +1139,22 @@ func TestEXIFRotationPersistence(t *testing.T) {
 	// For this test, we can't easily create EXIF data, but we can test the logic
 	// The key point is that if rotation happens, byteContainer should be updated
 
+	// Create Config for reformatMultipart - migrated to direct values
+	cfg := &Config{
+		FileUploadField:   "file",
+		ImgMaxWidth:       2000,    // Large, so no resize needed
+		ImgMaxHeight:      2000,    // Large, so no resize needed
+		ImgMaxNarrowSide:  0,       // Use bounding box
+		JpegQuality:       75,
+		WebpQuality:       DEFAULT_WEBP_QUALITY,
+		NormalizeExt:      false,   // Keep original filename
+		UploadMaxSize:     int64(100 << 20), // 100MB
+		ConvertToFormat:   "",
+		ImgMaxPixels:      2000 * 2000,
+	}
+
 	// Test the complete reformatMultipart to ensure rotation is preserved
-	_, resultBody, err := reformatMultipart(httptest.NewRecorder(), req)
+	_, resultBody, err := reformatMultipart(httptest.NewRecorder(), req, cfg)
 	if err != nil {
 		t.Fatalf("reformatMultipart failed: %v", err)
 	}
@@ -1212,9 +1182,9 @@ func TestEXIFRotationPersistence(t *testing.T) {
 	t.Logf("EXIF rotation persistence test completed - fix verified")
 }
 
-// TestEnvironmentVariableValidation tests environment variable bounds checking
+// TestEnvironmentVariableValidation tests environment variable bounds checking using Config struct
 func TestEnvironmentVariableValidation(t *testing.T) {
-	// Test JPEG_QUALITY validation by calling the actual initialization logic from main()
+	// Test JPEG_QUALITY validation using Config struct directly (no more global dependency)
 	testCases := []struct {
 		envValue     string
 		expectedJPEG int
@@ -1239,29 +1209,31 @@ func TestEnvironmentVariableValidation(t *testing.T) {
 				os.Setenv("JPEG_QUALITY", tc.envValue)
 			}
 
-			// Call the ACTUAL initialization logic from main() - extract this into a testable function
-			settingsInt = make(map[string]int)
-			initializeSettings()
+			// Use Config struct directly instead of global variables
+			cfg := NewConfigFromEnv()
 
-			if settingsInt[JPEG_QUALITY] != tc.expectedJPEG {
+			if cfg.JpegQuality != tc.expectedJPEG {
 				t.Errorf("JPEG_QUALITY with env %q: got %d, expected %d",
-					tc.envValue, settingsInt[JPEG_QUALITY], tc.expectedJPEG)
+					tc.envValue, cfg.JpegQuality, tc.expectedJPEG)
 			}
+
+			// Clean up
+			os.Unsetenv("JPEG_QUALITY")
 		})
 	}
 
-	// Test NORMALIZE_EXTENSIONS validation
+	// Test NORMALIZE_EXTENSIONS validation using Config struct
 	normalizeTestCases := []struct {
-		envValue     string
-		expectedNorm int
-		name         string
+		envValue       string
+		expectedNorm   bool
+		name           string
 	}{
-		{"1", 1, "Valid enable"},
-		{"0", 0, "Valid disable"},
-		{"", 1, "Empty should use default"},
-		{"2", 1, "Above 1 should use default"},
-		{"-1", 1, "Negative should use default"},
-		{"yes", 1, "Non-numeric should use default"},
+		{"1", true, "Valid enable"},
+		{"0", false, "Valid disable"},
+		{"", DEFAULT_NORMALIZE_EXTENSIONS == 1, "Empty should use default"},
+		{"2", DEFAULT_NORMALIZE_EXTENSIONS == 1, "Above 1 should use default"},
+		{"-1", DEFAULT_NORMALIZE_EXTENSIONS == 1, "Negative should use default"},
+		{"yes", DEFAULT_NORMALIZE_EXTENSIONS == 1, "Non-numeric should use default"},
 	}
 
 	for _, tc := range normalizeTestCases {
@@ -1272,14 +1244,16 @@ func TestEnvironmentVariableValidation(t *testing.T) {
 				os.Setenv("NORMALIZE_EXTENSIONS", tc.envValue)
 			}
 
-			// Call the ACTUAL initialization logic
-			settingsInt = make(map[string]int)
-			initializeSettings()
+			// Use Config struct directly instead of global variables
+			cfg := NewConfigFromEnv()
 
-			if settingsInt[NORMALIZE_EXTENSIONS] != tc.expectedNorm {
-				t.Errorf("NORMALIZE_EXTENSIONS with env %q: got %d, expected %d",
-					tc.envValue, settingsInt[NORMALIZE_EXTENSIONS], tc.expectedNorm)
+			if cfg.NormalizeExt != tc.expectedNorm {
+				t.Errorf("NORMALIZE_EXTENSIONS with env %q: got %t, expected %t",
+					tc.envValue, cfg.NormalizeExt, tc.expectedNorm)
 			}
+
+			// Clean up
+			os.Unsetenv("NORMALIZE_EXTENSIONS")
 		})
 	}
 }
@@ -1452,11 +1426,10 @@ func TestConvertToFormatControl(t *testing.T) {
 				os.Setenv("CONVERT_TO_FORMAT", "INVALID_FORMAT")
 			}
 
-			// Initialize settings
-			settingsString = make(map[string]string)
-			initializeSettings()
+			// Use Config struct directly instead of global variables
+			cfg := NewConfigFromEnv()
 
-			actualFormat := settingsString[CONVERT_TO_FORMAT]
+			actualFormat := cfg.ConvertToFormat
 			isEnabled := actualFormat != ""
 
 			if isEnabled != tc.expectedEnabled {
@@ -1473,6 +1446,9 @@ func TestConvertToFormatControl(t *testing.T) {
 			}
 
 			t.Logf("✅ Format %q → %q, enabled: %v", tc.convertFormat, actualFormat, isEnabled)
+			
+			// Clean up
+			os.Unsetenv("CONVERT_TO_FORMAT")
 		})
 	}
 }
@@ -1500,11 +1476,6 @@ func TestTransparencySkipsConversion(t *testing.T) {
 	// Test actual conversion with JPEG target - should skip
 	os.Setenv("CONVERT_TO_FORMAT", "JPEG")
 	defer os.Unsetenv("CONVERT_TO_FORMAT")
-
-	// Initialize settings
-	settingsString = make(map[string]string)
-	settingsInt = make(map[string]int)
-	initializeSettings()
 
 	// Create processing settings
 	settings := ImageProcessingSettings{
@@ -1577,17 +1548,14 @@ func TestWebPConversion(t *testing.T) {
 			os.Setenv("CONVERT_TO_FORMAT", "WEBP")
 			defer os.Unsetenv("CONVERT_TO_FORMAT")
 
-			// Initialize settings
-			settingsString = make(map[string]string)
-			settingsInt = make(map[string]int)
-			initializeSettings()
-
 			// Create processing settings - use normal settings to test real conversion
 			settings := ImageProcessingSettings{
-				MaxWidth:      1920,
-				MaxHeight:     1080,
-				MaxNarrowSide: 0,
-				JpegQuality:   DEFAULT_JPEG_QUALITY,
+				MaxWidth:        1920,
+				MaxHeight:       1080,
+				MaxNarrowSide:   0,
+				JpegQuality:     DEFAULT_JPEG_QUALITY,
+				WebpQuality:     DEFAULT_WEBP_QUALITY,
+				ConvertToFormat: "WEBP",
 			}
 
 			// Process the image
@@ -1743,11 +1711,6 @@ func TestWebPTransparencySkipsConversion(t *testing.T) {
 	// Set up environment variable for WebP conversion
 	os.Setenv("CONVERT_TO_FORMAT", "WEBP")
 	defer os.Unsetenv("CONVERT_TO_FORMAT")
-
-	// Initialize settings properly (like TestTransparencySkipsConversion)
-	settingsString = make(map[string]string)
-	settingsInt = make(map[string]int)
-	initializeSettings()
 
 	// Load transparent PNG
 	originalImage, err := bimg.Read("HappyNotes.png")
