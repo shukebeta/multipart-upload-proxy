@@ -4,7 +4,6 @@ import (
 	"testing"
 )
 
-// Helper function to create ImageProcessingSettings from individual values for testing
 func createImageProcessingSettings(maxWidth, maxHeight, maxNarrowSide, jpegQuality, webpQuality int, convertToFormat string) ImageProcessingSettings {
 	return ImageProcessingSettings{
 		MaxWidth:        maxWidth,

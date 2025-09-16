@@ -6,13 +6,11 @@ import (
 )
 
 func TestNewConfigFromEnv_Defaults(t *testing.T) {
-	// Clear all env variables to test defaults
 	clearAllTestEnvVars()
 	defer clearAllTestEnvVars()
 
 	cfg := NewConfigFromEnv()
 
-	// Test default values
 	if cfg.ImgMaxWidth != DEFAULT_IMG_MAX_WIDTH {
 		t.Errorf("ImgMaxWidth = %d, want %d", cfg.ImgMaxWidth, DEFAULT_IMG_MAX_WIDTH)
 	}
@@ -29,7 +27,6 @@ func TestNewConfigFromEnv_Defaults(t *testing.T) {
 		t.Errorf("ConvertToFormat = %q, want %q", cfg.ConvertToFormat, DEFAULT_CONVERT_TO_FORMAT)
 	}
 
-	// Test computed value
 	expectedMaxPixels := int64(DEFAULT_IMG_MAX_WIDTH) * int64(DEFAULT_IMG_MAX_HEIGHT)
 	if cfg.ImgMaxPixels != expectedMaxPixels {
 		t.Errorf("ImgMaxPixels = %d, want %d", cfg.ImgMaxPixels, expectedMaxPixels)
@@ -40,7 +37,6 @@ func TestNewConfigFromEnv_ValidIntegerValues(t *testing.T) {
 	clearAllTestEnvVars()
 	defer clearAllTestEnvVars()
 
-	// Set valid environment variables
 	os.Setenv("IMG_MAX_WIDTH", "1920")
 	os.Setenv("IMG_MAX_HEIGHT", "1080")
 	os.Setenv("IMG_MAX_NARROW_SIDE", "720")
@@ -74,7 +70,6 @@ func TestNewConfigFromEnv_ValidIntegerValues(t *testing.T) {
 		t.Errorf("NormalizeExt = %t, want true", cfg.NormalizeExt)
 	}
 
-	// Test computed value
 	expectedMaxPixels := int64(1920) * int64(1080)
 	if cfg.ImgMaxPixels != expectedMaxPixels {
 		t.Errorf("ImgMaxPixels = %d, want %d", cfg.ImgMaxPixels, expectedMaxPixels)
@@ -85,16 +80,14 @@ func TestNewConfigFromEnv_InvalidIntegerValues(t *testing.T) {
 	clearAllTestEnvVars()
 	defer clearAllTestEnvVars()
 
-	// Set invalid environment variables - should fall back to defaults
 	os.Setenv("IMG_MAX_WIDTH", "not-a-number")
 	os.Setenv("IMG_MAX_HEIGHT", "-100")  // negative
 	os.Setenv("JPEG_QUALITY", "150")     // too high
-	os.Setenv("WEBP_QUALITY", "0")       // too low
-	os.Setenv("NORMALIZE_EXTENSIONS", "2") // invalid value
+	os.Setenv("WEBP_QUALITY", "0")
+	os.Setenv("NORMALIZE_EXTENSIONS", "2")
 
 	cfg := NewConfigFromEnv()
 
-	// Should fall back to defaults for invalid values
 	if cfg.ImgMaxWidth != DEFAULT_IMG_MAX_WIDTH {
 		t.Errorf("ImgMaxWidth = %d, want default %d", cfg.ImgMaxWidth, DEFAULT_IMG_MAX_WIDTH)
 	}
@@ -111,7 +104,6 @@ func TestNewConfigFromEnv_InvalidIntegerValues(t *testing.T) {
 		t.Errorf("WebpQuality = %d, want default %d", cfg.WebpQuality, DEFAULT_WEBP_QUALITY)
 	}
 
-	// Test boolean defaults
 	expectedNormalizeExt := DEFAULT_NORMALIZE_EXTENSIONS == 1
 	if cfg.NormalizeExt != expectedNormalizeExt {
 		t.Errorf("NormalizeExt = %t, want default %t", cfg.NormalizeExt, expectedNormalizeExt)
@@ -122,7 +114,6 @@ func TestNewConfigFromEnv_StringValues(t *testing.T) {
 	clearAllTestEnvVars()
 	defer clearAllTestEnvVars()
 
-	// Set string environment variables
 	os.Setenv("FORWARD_DESTINATION", "https://api.example.com/upload")
 	os.Setenv("FILE_UPLOAD_FIELD", "image")
 	os.Setenv("LISTEN_PATH", "/v1/upload")
@@ -164,6 +155,16 @@ func TestNewConfigFromEnv_ConvertToFormat(t *testing.T) {
 			expected: "JPEG",
 		},
 		{
+			name:     "JPG uppercase - should normalize to JPEG",
+			envValue: "JPG",
+			expected: "JPEG",
+		},
+		{
+			name:     "jpg lowercase - should normalize to JPEG",
+			envValue: "jpg",
+			expected: "JPEG",
+		},
+		{
 			name:     "WEBP uppercase",
 			envValue: "WEBP",
 			expected: "WEBP",
@@ -174,8 +175,18 @@ func TestNewConfigFromEnv_ConvertToFormat(t *testing.T) {
 			expected: "WEBP",
 		},
 		{
+			name:     "WebP mixed case - should normalize",
+			envValue: "WebP",
+			expected: "WEBP",
+		},
+		{
 			name:     "With whitespace - should trim and normalize",
 			envValue: " jpeg ",
+			expected: "JPEG",
+		},
+		{
+			name:     "JPG with whitespace - should trim and normalize",
+			envValue: "  JPG  ",
 			expected: "JPEG",
 		},
 		{
@@ -208,8 +219,7 @@ func TestNewConfigFromEnv_Int64Values(t *testing.T) {
 	clearAllTestEnvVars()
 	defer clearAllTestEnvVars()
 
-	// Test valid int64 value
-	os.Setenv("UPLOAD_MAX_SIZE", "209715200") // 200MB
+	os.Setenv("UPLOAD_MAX_SIZE", "209715200")
 
 	cfg := NewConfigFromEnv()
 
@@ -222,7 +232,6 @@ func TestNewConfigFromEnv_InvalidInt64Values(t *testing.T) {
 	clearAllTestEnvVars()
 	defer clearAllTestEnvVars()
 
-	// Test invalid int64 values
 	tests := []struct {
 		name     string
 		envValue string
@@ -239,7 +248,6 @@ func TestNewConfigFromEnv_InvalidInt64Values(t *testing.T) {
 
 			cfg := NewConfigFromEnv()
 
-			// Should use default (100MB)
 			expectedDefault := int64(100 << 20)
 			if cfg.UploadMaxSize != expectedDefault {
 				t.Errorf("UploadMaxSize = %d, want default %d", cfg.UploadMaxSize, expectedDefault)
@@ -254,7 +262,6 @@ func TestNewConfigFromEnv_NarrowSideZeroAllowed(t *testing.T) {
 	clearAllTestEnvVars()
 	defer clearAllTestEnvVars()
 
-	// Test that narrow side can be 0 (disabled)
 	os.Setenv("IMG_MAX_NARROW_SIDE", "0")
 
 	cfg := NewConfigFromEnv()
@@ -264,7 +271,6 @@ func TestNewConfigFromEnv_NarrowSideZeroAllowed(t *testing.T) {
 	}
 }
 
-// Helper function to clear all test environment variables
 func clearAllTestEnvVars() {
 	envVars := []string{
 		"IMG_MAX_WIDTH",

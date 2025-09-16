@@ -47,8 +47,8 @@ The proxy can convert images to different formats for optimization:
 
 #### Format Selection
 - **Disabled** (`CONVERT_TO_FORMAT=""`, default): Resize images without format conversion (backward compatible)
-- **JPEG** (`CONVERT_TO_FORMAT="JPEG"`): Convert images to JPEG format
-- **WebP** (`CONVERT_TO_FORMAT="WEBP"`): Convert images to WebP format
+- **JPEG** (`CONVERT_TO_FORMAT="JPEG"` or `"JPG"` or `"jpeg"` or `"jpg"`): Convert images to JPEG format
+- **WebP** (`CONVERT_TO_FORMAT="WEBP"` or `"webp"`): Convert images to WebP format
 
 #### Transparency Handling
 When converting images with transparency:
@@ -71,8 +71,8 @@ When conversion doesn't reduce file size, the original image format and filename
 |`IMG_MAX_HEIGHT`            |1080            | Pixels, keeps aspect ratio (ignored if IMG_MAX_NARROW_SIDE is set)
 |`IMG_MAX_NARROW_SIDE`      |0 (disabled)    | Pixels, constrains the narrow side of the image, allows wide side to be larger
 |`JPEG_QUALITY`|90|JPEG compression quality (1-100, lower = smaller file). Invalid values fall back to default
-|`WEBP_QUALITY`|85|WebP compression quality (1-100, lower = smaller file). Invalid values fall back to default
-|`CONVERT_TO_FORMAT`|"" (disabled)|Format conversion: "" (disabled), "JPEG", or "WEBP". Transparent images may fallback to PNG
+|`WEBP_QUALITY`|90|WebP compression quality (1-100, lower = smaller file). Invalid values fall back to default
+|`CONVERT_TO_FORMAT`|"" (disabled)|Format conversion: "" (disabled), "JPEG"/"JPG"/"jpeg"/"jpg", or "WEBP"/"webp". Transparent images may fallback to PNG
 |`NORMALIZE_EXTENSIONS`|1 (enabled)|Normalize filenames to converted format extension (1=enabled, 0=keep original names). Invalid values fall back to default
 |`UPLOAD_MAX_SIZE`|104857600|Maximum form size in bytes
 |`IMG_MAX_PIXELS`|2073600|If the images width*height (in pixels) doesn't exceed this value, don't resize. Defaults to IMG_MAX_WIDTH × IMG_MAX_HEIGHT

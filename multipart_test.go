@@ -203,10 +203,8 @@ func TestCreateFormFileWithMime(t *testing.T) {
 			// Close writer to finalize the multipart form
 			writer.Close()
 
-			// Verify the content contains the expected headers
 			content := body.String()
 			
-			// Check for escaped field name and filename
 			expectedFieldname := escapeQuotes(tt.fieldname)
 			expectedFilename := escapeQuotes(tt.filename)
 			

@@ -6,7 +6,6 @@ import (
 	"github.com/h2non/bimg"
 )
 
-// Image processing types
 type ImageSize struct {
 	Width  int
 	Height int
@@ -29,7 +28,6 @@ type ImageProcessingResult struct {
 	ProcessingError error
 }
 
-// detectImageTransparency checks if an image has an alpha channel using bimg metadata
 func detectImageTransparency(imageData []byte) (bool, error) {
 	image := bimg.NewImage(imageData)
 	metadata, err := image.Metadata()
@@ -39,10 +37,7 @@ func detectImageTransparency(imageData []byte) (bool, error) {
 	return metadata.Alpha, nil
 }
 
-// processImageWithStrategy processes an image according to the given settings
-// Uses only the settings struct, no global dependencies
 func processImageWithStrategy(originalData []byte, settings ImageProcessingSettings) (*ImageProcessingResult, error) {
-	// Early transparency detection - skip any format conversion if image has transparency
 	convertFormat := settings.ConvertToFormat
 	if convertFormat != "" {
 		hasTransparency, err := detectImageTransparency(originalData)
@@ -58,7 +53,6 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 		}
 	}
 
-	// Handle EXIF orientation first - this gives us the corrected image and bytes
 	workingImage, rotatedData, err := handleEXIFOrientation(originalData)
 	if err != nil {
 		return &ImageProcessingResult{

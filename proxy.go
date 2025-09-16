@@ -10,32 +10,26 @@ import (
 	"time"
 )
 
-// EXIF orientation constants
 const (
 	EXIF_ORIENTATION_NORMAL = 1
 )
 
-// Default MIME type constants
 const (
 	DEFAULT_MIME_TYPE = "application/octet-stream"
 	JPEG_MIME_TYPE    = "image/jpeg"
 	WEBP_MIME_TYPE    = "image/webp"
 )
 
-// Default settings constants
 const (
 	DEFAULT_IMG_MAX_WIDTH         = 1920
 	DEFAULT_IMG_MAX_HEIGHT        = 1080
-	DEFAULT_IMG_MAX_NARROW_SIDE   = 0  // 0 means not set, use original logic
-	DEFAULT_JPEG_QUALITY          = 90 // Increased from 75 to 90 per author feedback
-	DEFAULT_WEBP_QUALITY          = 85 // WebP default quality
-	DEFAULT_NORMALIZE_EXTENSIONS  = 1  // 1 means normalize extensions, 0 means keep original
-	DEFAULT_CONVERT_TO_FORMAT     = "" // Empty = disabled (backwards compatible)
+	DEFAULT_IMG_MAX_NARROW_SIDE   = 0
+	DEFAULT_JPEG_QUALITY          = 90
+	DEFAULT_WEBP_QUALITY          = 90
+	DEFAULT_NORMALIZE_EXTENSIONS  = 1
+	DEFAULT_CONVERT_TO_FORMAT     = ""
 )
 
-// Image processing types moved to imageprocessing.go
-
-// Settings / Environment Variables
 const IMG_MAX_WIDTH = "IMG_MAX_WIDTH"
 const IMG_MAX_HEIGHT = "IMG_MAX_HEIGHT"
 const IMG_MAX_NARROW_SIDE = "IMG_MAX_NARROW_SIDE"
@@ -64,7 +58,6 @@ curl --header "X-Test: hello" -F "deviceAssetId=web-input.jpg-1672571948584" -F 
 func main() {
 	cfg := NewConfigFromEnv()
 	
-	// Log configuration settings
 	log.Println(IMG_MAX_WIDTH+": ", cfg.ImgMaxWidth)
 	log.Println(IMG_MAX_HEIGHT+": ", cfg.ImgMaxHeight) 
 	log.Println(IMG_MAX_NARROW_SIDE+": ", cfg.ImgMaxNarrowSide)
@@ -82,12 +75,10 @@ func main() {
 	log.Println(LISTEN_PATH+": ", cfg.ListenPath)
 	log.Println(CONVERT_TO_FORMAT+": ", cfg.ConvertToFormat)
 
-	// Other
 	client = &http.Client{
-		Timeout: time.Second * 60,  // Increased from 10s to 60s for large files (videos, high-res images)
+		Timeout: time.Second * 60,
 	}
 
-	// Create a closure to pass config to the handler
 	handlerWithConfig := func(w http.ResponseWriter, r *http.Request) {
 		proxyHandler(w, r, cfg)
 	}
@@ -140,13 +131,10 @@ func proxyHandler(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	// Send result back
 	copyHeader(w.Header(), proxyResp.Header)
 	w.WriteHeader(proxyResp.StatusCode)
 	io.Copy(w, proxyResp.Body)
 }
-
-// multipart processing functions moved to multipart.go
 
 var ignoreHeaders = []string{
 	"Connection",
@@ -190,4 +178,3 @@ func copyHeader(dst, src http.Header) {
 	}
 }
 
-// Image processing functions moved to imageprocessing.go

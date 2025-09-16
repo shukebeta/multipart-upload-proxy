@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-// Config holds application configuration parsed from environment variables
 type Config struct {
 	ImgMaxWidth        int
 	ImgMaxHeight       int
@@ -23,7 +22,6 @@ type Config struct {
 	ConvertToFormat    string
 }
 
-// NewConfigFromEnv parses env vars, validates and returns a Config.
 func NewConfigFromEnv() *Config {
 	cfg := &Config{
 		ImgMaxWidth:        DEFAULT_IMG_MAX_WIDTH,
@@ -32,14 +30,13 @@ func NewConfigFromEnv() *Config {
 		JpegQuality:        DEFAULT_JPEG_QUALITY,
 		WebpQuality:        DEFAULT_WEBP_QUALITY,
 		NormalizeExt:       DEFAULT_NORMALIZE_EXTENSIONS == 1,
-		UploadMaxSize:      100 << 20, // 100MB default
+		UploadMaxSize:      100 << 20,
 		ForwardDestination: "https://httpbin.org/anything",
 		FileUploadField:    "assetData",
 		ListenPath:         "/api/assets",
 		ConvertToFormat:    DEFAULT_CONVERT_TO_FORMAT,
 	}
 
-	// Parse integer settings with validation
 	if v := os.Getenv(IMG_MAX_WIDTH); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			cfg.ImgMaxWidth = n
@@ -88,7 +85,6 @@ func NewConfigFromEnv() *Config {
 		}
 	}
 
-	// Parse int64 settings
 	if v := os.Getenv(UPLOAD_MAX_SIZE); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
 			cfg.UploadMaxSize = n
@@ -97,7 +93,6 @@ func NewConfigFromEnv() *Config {
 		}
 	}
 
-	// Parse string settings
 	if v := os.Getenv(FORWARD_DESTINATION); v != "" {
 		cfg.ForwardDestination = v
 	}
@@ -112,15 +107,17 @@ func NewConfigFromEnv() *Config {
 
 	if v := os.Getenv(CONVERT_TO_FORMAT); v != "" {
 		normalizedFormat := strings.ToUpper(strings.TrimSpace(v))
+		if normalizedFormat == "JPG" {
+			normalizedFormat = "JPEG"
+		}
 		if normalizedFormat == "" || normalizedFormat == "JPEG" || normalizedFormat == "WEBP" {
 			cfg.ConvertToFormat = normalizedFormat
 		} else {
-			log.Printf("Invalid %s=%q, using %q (valid values: \"\", \"JPEG\", \"WEBP\")",
+			log.Printf("Invalid %s=%q, using %q (valid values: \"\", \"JPEG\", \"JPG\", \"WEBP\")",
 				CONVERT_TO_FORMAT, v, cfg.ConvertToFormat)
 		}
 	}
 
-	// Compute derived values
 	cfg.ImgMaxPixels = int64(cfg.ImgMaxWidth) * int64(cfg.ImgMaxHeight)
 
 

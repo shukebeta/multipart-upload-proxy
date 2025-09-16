@@ -18,24 +18,18 @@ import (
 	"github.com/h2non/bimg"
 )
 
-// checkLibVips checks if libvips is available
 func checkLibVips() bool {
-	// Try to create a simple bimg operation
 	testImage := make([]byte, 1)
 	_, err := bimg.NewImage(testImage).Size()
-	// If Size() returns an error about invalid image, libvips is working
-	// If it panics or returns a different error, libvips might be missing
 	return err != nil && err.Error() != ""
 }
 
-// skipIfNoLibVips skips the test if libvips is not available
 func skipIfNoLibVips(t *testing.T) {
 	if !checkLibVips() {
 		t.Skip("libvips not available, skipping test")
 	}
 }
 
-// setupTestEnvironment sets up environment variables for testing
 func setupTestEnvironment() {
 	os.Setenv("IMG_MAX_WIDTH", "800")
 	os.Setenv("IMG_MAX_HEIGHT", "600")
@@ -45,15 +39,11 @@ func setupTestEnvironment() {
 	os.Setenv("LISTEN_PATH", "/api/assets")
 }
 
-// createTestImage creates a test JPEG image with specified dimensions using standard library
 func createTestImage(width, height int, quality int) ([]byte, error) {
-	// Create an image with standard library
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
-	// Fill with a simple pattern
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			// Create a colorful pattern
 			r := uint8((x + y) % 256)
 			g := uint8((x * 2) % 256)
 			b := uint8((y * 2) % 256)
@@ -61,7 +51,6 @@ func createTestImage(width, height int, quality int) ([]byte, error) {
 		}
 	}
 
-	// Encode to JPEG with specified quality
 	var buf bytes.Buffer
 	options := &jpeg.Options{Quality: quality}
 	err := jpeg.Encode(&buf, img, options)
@@ -72,15 +61,11 @@ func createTestImage(width, height int, quality int) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// createTestPNG creates a test PNG image with specified dimensions using standard library
 func createTestPNG(width, height int) ([]byte, error) {
-	// Create an image with standard library
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
-	// Fill with a different pattern than JPEG
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			// Create a different colorful pattern
 			r := uint8((x ^ y) % 256)
 			g := uint8((x + y*2) % 256)
 			b := uint8((x*3 + y) % 256)
@@ -88,7 +73,6 @@ func createTestPNG(width, height int) ([]byte, error) {
 		}
 	}
 
-	// Encode to PNG
 	var buf bytes.Buffer
 	err := png.Encode(&buf, img)
 	if err != nil {
@@ -98,9 +82,7 @@ func createTestPNG(width, height int) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// TestJPEGQualityEnvironmentVariable tests that JPEG_QUALITY is properly loaded
 func TestJPEGQualityEnvironmentVariable(t *testing.T) {
-	// Test default value
 	os.Unsetenv("JPEG_QUALITY")
 	cfg := NewConfigFromEnv()
 	
@@ -108,7 +90,6 @@ func TestJPEGQualityEnvironmentVariable(t *testing.T) {
 		t.Errorf("Expected default JPEG_QUALITY to be %d, got %d", DEFAULT_JPEG_QUALITY, cfg.JpegQuality)
 	}
 
-	// Test custom value
 	os.Setenv("JPEG_QUALITY", "50")
 	defer os.Unsetenv("JPEG_QUALITY")
 	cfg = NewConfigFromEnv()
@@ -118,7 +99,6 @@ func TestJPEGQualityEnvironmentVariable(t *testing.T) {
 	}
 }
 
-// TestJPEGQualityBoundaries tests edge cases for JPEG quality values
 func TestJPEGQualityBoundaries(t *testing.T) {
 	testCases := []struct {
 		envValue string
@@ -148,17 +128,13 @@ func TestJPEGQualityBoundaries(t *testing.T) {
 	}
 }
 
-// TestBackwardCompatibility ensures existing functionality still works
 func TestBackwardCompatibility(t *testing.T) {
 	setupTestEnvironment()
 
-	// Test that the proxy still works without JPEG_QUALITY set
 	os.Unsetenv("JPEG_QUALITY")
 
-	// Use Config system as main() now does
 	cfg := NewConfigFromEnv()
 
-	// Verify all expected settings have proper defaults
 	if cfg.ImgMaxWidth == 0 {
 		t.Error("IMG_MAX_WIDTH should have a default value")
 	}
@@ -169,7 +145,6 @@ func TestBackwardCompatibility(t *testing.T) {
 		t.Error("JPEG_QUALITY should have a default value")
 	}
 	
-	// Verify environment variables override defaults
 	os.Setenv("JPEG_QUALITY", "50")
 	defer os.Unsetenv("JPEG_QUALITY")
 	cfg = NewConfigFromEnv()
@@ -179,9 +154,7 @@ func TestBackwardCompatibility(t *testing.T) {
 	}
 }
 
-// TestImageProcessingWithQuality tests actual image processing with different quality settings
 func TestImageProcessingWithQuality(t *testing.T) {
-	// Load the PNG test image file to test format conversion
 	originalImage, err := bimg.Read("HappyNotes.png")
 	if err != nil {
 		t.Fatalf("Failed to load test image HappyNotes.png: %v", err)
@@ -195,7 +168,6 @@ func TestImageProcessingWithQuality(t *testing.T) {
 
 	t.Logf("Original image: %dx%d, %d bytes", oldImageSize.Width, oldImageSize.Height, len(originalImage))
 
-	// Test different quality levels
 	testCases := []struct {
 		quality int
 		name    string
@@ -210,7 +182,6 @@ func TestImageProcessingWithQuality(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create Config for this quality level instead of using global variables
 			cfg := &Config{
 				ImgMaxWidth:      800,
 				ImgMaxHeight:     600,
@@ -221,12 +192,10 @@ func TestImageProcessingWithQuality(t *testing.T) {
 
 			oldImagePX := int64(oldImageSize.Width * oldImageSize.Height)
 			if oldImagePX > cfg.ImgMaxPixels {
-				// Use the same logic as in reformatMultipart for consistency
 				var newWidth, newHeight int
 				scaleWidth := float64(cfg.ImgMaxWidth) / float64(oldImageSize.Width)
 				scaleHeight := float64(cfg.ImgMaxHeight) / float64(oldImageSize.Height)
 
-				// Use the smaller scale factor to ensure both dimensions fit
 				scale := scaleWidth
 				if scaleHeight < scaleWidth {
 					scale = scaleHeight
@@ -235,7 +204,6 @@ func TestImageProcessingWithQuality(t *testing.T) {
 				newWidth = int(float64(oldImageSize.Width) * scale)
 				newHeight = int(float64(oldImageSize.Height) * scale)
 
-				// Test the quality-controlled processing
 				options := bimg.Options{
 					Width:   newWidth,
 					Height:  newHeight,
@@ -248,12 +216,10 @@ func TestImageProcessingWithQuality(t *testing.T) {
 					t.Fatalf("Image processing failed: %v", err)
 				}
 
-				// Verify the image was processed
 				if len(newByteContainer) == 0 {
 					t.Error("Processed image should not be empty")
 				}
 
-				// Verify dimensions
 				processedImage := bimg.NewImage(newByteContainer)
 				processedSize, err := processedImage.Size()
 				if err != nil {
@@ -296,7 +262,6 @@ func TestImageProcessingWithQuality(t *testing.T) {
 	}
 }
 
-// TestMultipartFormProcessing tests the complete multipart form processing
 func TestMultipartFormProcessing(t *testing.T) {
 	// Create Config instead of using global variables
 	cfg := &Config{
@@ -304,9 +269,9 @@ func TestMultipartFormProcessing(t *testing.T) {
 		ForwardDestination: "http://test.example.com/api/assets",
 		ImgMaxWidth:        800,
 		ImgMaxHeight:       600,
-		ImgMaxNarrowSide:   0, // Use original bounding box logic
-		JpegQuality:        30, // Use low quality for testing
-		UploadMaxSize:      100 << 20, // 100MB
+		ImgMaxNarrowSide:   0,
+		JpegQuality:        30,
+		UploadMaxSize:      100 << 20,
 		ImgMaxPixels:       800 * 600,
 	}
 
@@ -316,15 +281,12 @@ func TestMultipartFormProcessing(t *testing.T) {
 		t.Fatalf("Failed to load test image Norway.jpeg: %v", err)
 	}
 
-	// Create multipart form
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	// Add form fields
 	writer.WriteField("deviceId", "TEST")
 	writer.WriteField("createdAt", "2023-01-01T00:00:00.000Z")
 
-	// Add file
 	part, err := writer.CreateFormFile("assetData", "test.jpg")
 	if err != nil {
 		t.Fatalf("Failed to create form file: %v", err)
@@ -337,20 +299,16 @@ func TestMultipartFormProcessing(t *testing.T) {
 
 	writer.Close()
 
-	// Create test request
 	req := httptest.NewRequest("POST", "/api/assets", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	// Mock the forward destination with a test server
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Parse the forwarded multipart form
 		err := r.ParseMultipartForm(32 << 20)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		// Check that the image was processed
 		file, _, err := r.FormFile("assetData")
 		if err != nil {
 			http.Error(w, "No file received", http.StatusBadRequest)
@@ -364,13 +322,11 @@ func TestMultipartFormProcessing(t *testing.T) {
 			return
 		}
 
-		// Verify the image was compressed
 		if len(imageData) == 0 {
 			http.Error(w, "Empty image received", http.StatusBadRequest)
 			return
 		}
 
-		// Check image dimensions
 		processedImage := bimg.NewImage(imageData)
 		size, err := processedImage.Size()
 		if err != nil {
@@ -378,7 +334,6 @@ func TestMultipartFormProcessing(t *testing.T) {
 			return
 		}
 
-		// Should be resized to fit within limits
 		if size.Width > 800 || size.Height > 600 {
 			http.Error(w, "Image not properly resized", http.StatusBadRequest)
 			return
@@ -389,7 +344,6 @@ func TestMultipartFormProcessing(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	// Update config to point to test server
 	cfg.ForwardDestination = testServer.URL + "/api/assets"
 
 	// Test would require more complex setup to fully test the HTTP proxy behavior
@@ -403,7 +357,6 @@ func TestMultipartFormProcessing(t *testing.T) {
 	}
 	defer file.Close()
 
-	// Test the image processing
 	imageData, err := io.ReadAll(file)
 	if err != nil {
 		t.Fatalf("Failed to read image data: %v", err)
@@ -418,13 +371,11 @@ func TestMultipartFormProcessing(t *testing.T) {
 	t.Logf("Original image: %dx%d, %d bytes, filename: %s",
 		oldImageSize.Width, oldImageSize.Height, len(imageData), handler.Filename)
 
-	// This verifies our image processing setup is working
 	if oldImageSize.Width == 0 || oldImageSize.Height == 0 {
 		t.Error("Invalid image dimensions")
 	}
 }
 
-// Benchmark tests to measure performance impact
 func BenchmarkImageProcessingQuality30(b *testing.B) {
 	benchmarkImageProcessing(b, 30)
 }
@@ -438,13 +389,11 @@ func BenchmarkImageProcessingQuality95(b *testing.B) {
 }
 
 func benchmarkImageProcessing(b *testing.B, quality int) {
-	// Create test image
 	testImage := make([]byte, 1200*1000*3)
 	for i := range testImage {
 		testImage[i] = byte(i % 256)
 	}
 
-	// Convert to JPEG first
 	originalOptions := bimg.Options{
 		Width:   1200,
 		Height:  1000,
@@ -475,7 +424,6 @@ func benchmarkImageProcessing(b *testing.B, quality int) {
 	}
 }
 
-// TestNarrowSideConstraint tests the new IMG_MAX_NARROW_SIDE functionality
 func TestNarrowSideConstraint(t *testing.T) {
 	// Base config for testing - each test case will modify narrow side setting
 	baseCfg := &Config{
@@ -627,7 +575,6 @@ func TestNarrowSideConstraint(t *testing.T) {
 	}
 }
 
-// TestNarrowSidePriorityOverBoundingBox tests that narrow side takes priority over width/height limits
 func TestNarrowSidePriorityOverBoundingBox(t *testing.T) {
 	cfg := &Config{
 		ImgMaxWidth:  500, // Make smaller than Norway's width (640)
@@ -706,7 +653,6 @@ func TestNarrowSidePriorityOverBoundingBox(t *testing.T) {
 	t.Logf("Narrow side result: %dx%d (resize: %v)", newWidth2, newHeight2, needsResize2)
 }
 
-// TestEXIFOrientationHandling tests that EXIF orientation is properly handled
 func TestEXIFOrientationHandling(t *testing.T) {
 	cfg := &Config{
 		ImgMaxWidth:      800,
@@ -793,7 +739,6 @@ func TestEXIFOrientationHandling(t *testing.T) {
 	t.Log("EXIF orientation handling test completed successfully")
 }
 
-// TestExtensionNormalization tests filename and MIME type normalization
 func TestExtensionNormalization(t *testing.T) {
 	testCases := []struct {
 		input    string
@@ -819,42 +764,31 @@ func TestExtensionNormalization(t *testing.T) {
 	}
 }
 
-// TestNormalizationConfiguration tests the NORMALIZE_EXTENSIONS setting
 func TestNormalizationConfiguration(t *testing.T) {
-	// Test normalization configuration using Config struct (no global dependencies)
-	
-	// Test default behavior (normalization should be enabled by default)
-	os.Unsetenv("NORMALIZE_EXTENSIONS") // Clear to test default
+	os.Unsetenv("NORMALIZE_EXTENSIONS")
 	cfg := NewConfigFromEnv()
 	expectedDefault := DEFAULT_NORMALIZE_EXTENSIONS == 1
 	if cfg.NormalizeExt != expectedDefault {
 		t.Errorf("NORMALIZE_EXTENSIONS default should be %t, got %t", expectedDefault, cfg.NormalizeExt)
 	}
 	
-	// Test disabled
 	os.Setenv("NORMALIZE_EXTENSIONS", "0")
 	cfg = NewConfigFromEnv()
 	if cfg.NormalizeExt != false {
 		t.Error("NORMALIZE_EXTENSIONS should be configurable to false (disabled)")
 	}
 	
-	// Test enabled
 	os.Setenv("NORMALIZE_EXTENSIONS", "1")
 	cfg = NewConfigFromEnv()
 	if cfg.NormalizeExt != true {
 		t.Error("NORMALIZE_EXTENSIONS should be configurable to true (enabled)")
 	}
 	
-	// Clean up
 	os.Unsetenv("NORMALIZE_EXTENSIONS")
 	t.Log("Extension normalization configuration test passed")
 }
 
-// TestCompressionAwareRenaming tests that renaming only happens when compression is used
 func TestCompressionAwareRenaming(t *testing.T) {
-	// This test simulates the scenario where compression makes file larger
-	// In such cases, original file should be kept with original extension
-
 	t.Log("Testing compression-aware renaming logic")
 
 	// Load a test image
@@ -904,9 +838,7 @@ func TestCompressionAwareRenaming(t *testing.T) {
 	}
 }
 
-// TestNonImageFileHandling tests that non-image files are not incorrectly processed
 func TestNonImageFileHandling(t *testing.T) {
-	// Test that non-image files correctly fail image processing
 	fakeVideoData := []byte("FAKE VIDEO FILE CONTENT - NOT AN IMAGE - THIS IS A TEST")
 
 	fakeImage := bimg.NewImage(fakeVideoData)
@@ -918,13 +850,11 @@ func TestNonImageFileHandling(t *testing.T) {
 		t.Logf("✅ Non-image correctly failed parsing: %v", err)
 	}
 
-	// Verify that our wasImageProcessed logic would work correctly
 	wasImageProcessed := err == nil
 	if wasImageProcessed {
 		t.Error("wasImageProcessed should be false for non-image data")
 	}
 
-	// Test with actual image for comparison
 	realImageData, err := bimg.Read("HappyNotes.png")
 	if err != nil {
 		t.Fatalf("Failed to load real image for comparison: %v", err)
@@ -945,7 +875,6 @@ func TestNonImageFileHandling(t *testing.T) {
 	t.Log("Non-image file handling test passed - videos won't be renamed to .jpg")
 }
 
-// TestNarrowSideBackwardCompatibility tests that not setting narrow side uses original logic
 func TestNarrowSideBackwardCompatibility(t *testing.T) {
 	cfg := &Config{
 		ImgMaxWidth:      800,
@@ -954,17 +883,13 @@ func TestNarrowSideBackwardCompatibility(t *testing.T) {
 		JpegQuality:      75,
 	}
 
-	// Test that the behavior is identical to before when IMG_MAX_NARROW_SIDE is 0
 	originalW, originalH := 1200, 800
 
-	// This should use the original bounding box logic
 	needsResize := originalW > cfg.ImgMaxWidth || originalH > cfg.ImgMaxHeight
 	if !needsResize {
 		t.Error("Should need resize with bounding box logic")
 	}
 
-	// Even though narrow side (800) would fit in typical narrow constraints,
-	// the bounding box logic should still apply
 	if cfg.ImgMaxNarrowSide > 0 {
 		t.Error("Test setup error: IMG_MAX_NARROW_SIDE should be 0 for this test")
 	}
@@ -972,7 +897,6 @@ func TestNarrowSideBackwardCompatibility(t *testing.T) {
 	t.Logf("Backward compatibility verified: using bounding box when narrow side = %d", cfg.ImgMaxNarrowSide)
 }
 
-// TestMIMEConsistencyWithBytes tests that MIME type matches actual byte content
 func TestMIMEConsistencyWithBytes(t *testing.T) {
 	skipIfNoLibVips(t)
 
@@ -1071,7 +995,6 @@ func TestMIMEConsistencyWithBytes(t *testing.T) {
 	t.Logf("Current behavior test passed, now testing error handling edge case...")
 }
 
-// TestEXIFRotationPersistence tests that EXIF rotation is preserved in final bytes
 func TestEXIFRotationPersistence(t *testing.T) {
 	skipIfNoLibVips(t)
 
@@ -1183,7 +1106,6 @@ func TestEXIFRotationPersistence(t *testing.T) {
 	t.Logf("EXIF rotation persistence test completed - fix verified")
 }
 
-// TestEnvironmentVariableValidation tests environment variable bounds checking using Config struct
 func TestEnvironmentVariableValidation(t *testing.T) {
 	// Test JPEG_QUALITY validation using Config struct directly (no more global dependency)
 	testCases := []struct {
@@ -1259,7 +1181,6 @@ func TestEnvironmentVariableValidation(t *testing.T) {
 	}
 }
 
-// TestChangeExtensionEdgeCases tests realistic edge cases for filename extension changes
 func TestChangeExtensionEdgeCases(t *testing.T) {
 	// Focus on realistic image filename scenarios that could actually happen
 	testCases := []struct {
@@ -1286,7 +1207,6 @@ func TestChangeExtensionEdgeCases(t *testing.T) {
 	}
 }
 
-// TestTransparencyDetection tests basic transparency detection using bimg
 func TestTransparencyDetection(t *testing.T) {
 	skipIfNoLibVips(t)
 
@@ -1337,20 +1257,15 @@ func TestTransparencyDetection(t *testing.T) {
 	t.Logf("✅ HappyNotes.png transparency: %v", realPngMeta.Alpha)
 }
 
-// createTestPNGWithTransparency creates a PNG with actual transparency for testing
 func createTestPNGWithTransparency(width, height int) ([]byte, error) {
-	// Create RGBA image with transparency
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
-	// Fill with pattern including transparent pixels
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			if (x+y)%2 == 0 {
-				// Transparent pixels
-				img.Set(x, y, color.RGBA{255, 0, 0, 128}) // Semi-transparent red
+				img.Set(x, y, color.RGBA{255, 0, 0, 128})
 			} else {
-				// Opaque pixels
-				img.Set(x, y, color.RGBA{0, 255, 0, 255}) // Opaque green
+				img.Set(x, y, color.RGBA{0, 255, 0, 255})
 			}
 		}
 	}
@@ -1364,7 +1279,6 @@ func createTestPNGWithTransparency(width, height int) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// TestTransparencyPreservation tests that transparent images are not converted to JPEG
 func TestTransparencyPreservation(t *testing.T) {
 	skipIfNoLibVips(t)
 
@@ -1400,7 +1314,6 @@ func TestTransparencyPreservation(t *testing.T) {
 	t.Logf("✅ Transparency detection working: %v", hasTransparency)
 }
 
-// TestConvertToFormatControl tests the CONVERT_TO_FORMAT environment variable
 func TestConvertToFormatControl(t *testing.T) {
 	skipIfNoLibVips(t)
 
@@ -1454,7 +1367,6 @@ func TestConvertToFormatControl(t *testing.T) {
 	}
 }
 
-// TestTransparencySkipsConversion tests that transparent images skip format conversion
 func TestTransparencySkipsConversion(t *testing.T) {
 	skipIfNoLibVips(t)
 
@@ -1505,7 +1417,6 @@ func TestTransparencySkipsConversion(t *testing.T) {
 	t.Logf("✅ Transparent image correctly skipped JPEG conversion")
 }
 
-// TestWebPConversion tests PNG to WebP conversion with transparency preservation
 func TestWebPConversion(t *testing.T) {
 	skipIfNoLibVips(t)
 
@@ -1620,7 +1531,6 @@ func TestWebPConversion(t *testing.T) {
 	}
 }
 
-// TestWebPTransparencyPreservation tests WebP conversion without resize to isolate transparency issues
 func TestWebPTransparencyPreservation(t *testing.T) {
 	skipIfNoLibVips(t)
 
@@ -1705,7 +1615,6 @@ func TestWebPTransparencyPreservation(t *testing.T) {
 		webpMeta.Alpha, webpResizedMeta.Alpha)
 }
 
-// TestWebPTransparencySkipsConversion tests that WebP conversion with transparency is skipped
 func TestWebPTransparencySkipsConversion(t *testing.T) {
 	skipIfNoLibVips(t)
 
@@ -1772,7 +1681,6 @@ func TestWebPTransparencySkipsConversion(t *testing.T) {
 	t.Logf("✅ WebP conversion correctly skipped for transparent image: %s with alpha=%v", resultMeta.Type, resultMeta.Alpha)
 }
 
-// TestWebPOptionsForTransparency tests various bimg options to find transparency-preserving setup
 func TestWebPOptionsForTransparency(t *testing.T) {
 	skipIfNoLibVips(t)
 
@@ -1865,7 +1773,6 @@ func TestWebPOptionsForTransparency(t *testing.T) {
 	}
 }
 
-// TestResizeLogMessages tests that log messages accurately reflect whether resize occurred
 func TestResizeLogMessages(t *testing.T) {
 	// Capture log output
 	var logBuffer bytes.Buffer
