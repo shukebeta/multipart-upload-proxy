@@ -7,6 +7,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -1859,6 +1860,114 @@ func TestWebPOptionsForTransparency(t *testing.T) {
 				t.Logf("✅ SUCCESS: %s preserved transparency", tc.name)
 			} else {
 				t.Logf("❌ FAILED: %s lost transparency", tc.name)
+			}
+		})
+	}
+}
+
+// TestResizeLogMessages tests that log messages accurately reflect whether resize occurred
+func TestResizeLogMessages(t *testing.T) {
+	// Capture log output
+	var logBuffer bytes.Buffer
+	oldOutput := log.Writer()
+	log.SetOutput(&logBuffer)
+	defer log.SetOutput(oldOutput)
+
+	testCases := []struct {
+		name           string
+		imageWidth     int
+		imageHeight    int
+		maxWidth       int
+		maxHeight      int
+		expectResize   bool
+		expectedLogMsg string
+	}{
+		{
+			name:           "small_image_no_resize",
+			imageWidth:     100,
+			imageHeight:    100,
+			maxWidth:       800,
+			maxHeight:      600,
+			expectResize:   false,
+			expectedLogMsg: "Image processed but no changes needed",
+		},
+		{
+			name:           "large_image_needs_resize",
+			imageWidth:     1000,
+			imageHeight:    800,
+			maxWidth:       500,
+			maxHeight:      400,
+			expectResize:   true,
+			expectedLogMsg: "Image resized but format conversion disabled",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Clear log buffer
+			logBuffer.Reset()
+
+			// Create test image
+			testImage, err := createTestPNG(tc.imageWidth, tc.imageHeight)
+			if err != nil {
+				t.Fatalf("Failed to create test image: %v", err)
+			}
+
+			// Create multipart form
+			body := &bytes.Buffer{}
+			writer := multipart.NewWriter(body)
+			part, err := writer.CreateFormFile("testFile", "test.png")
+			if err != nil {
+				t.Fatalf("Failed to create form file: %v", err)
+			}
+			_, err = part.Write(testImage)
+			if err != nil {
+				t.Fatalf("Failed to write test image: %v", err)
+			}
+			writer.Close()
+
+			// Create request
+			req := httptest.NewRequest("POST", "/upload", body)
+			req.Header.Set("Content-Type", writer.FormDataContentType())
+			req.ParseMultipartForm(32 << 20)
+
+			// Create config with conversion disabled (to trigger the log message we're testing)
+			cfg := &Config{
+				FileUploadField:   "testFile",
+				ImgMaxWidth:       tc.maxWidth,
+				ImgMaxHeight:      tc.maxHeight,
+				ImgMaxNarrowSide:  0, // Use bounding box logic
+				JpegQuality:       75,
+				WebpQuality:       DEFAULT_WEBP_QUALITY,
+				NormalizeExt:      false, // Keep original extension
+				UploadMaxSize:     int64(100 << 20),
+				ConvertToFormat:   "", // No format conversion - this triggers our log path
+				ImgMaxPixels:      int64(tc.maxWidth * tc.maxHeight),
+			}
+
+			// Call reformatMultipart to trigger the log
+			_, _, err = reformatMultipart(httptest.NewRecorder(), req, cfg)
+			if err != nil {
+				t.Fatalf("reformatMultipart failed: %v", err)
+			}
+
+			// Check log output
+			logOutput := logBuffer.String()
+			// Debug: print what we actually got
+			t.Logf("Captured log output: %q", logOutput)
+			if !strings.Contains(logOutput, tc.expectedLogMsg) {
+				t.Errorf("Expected log to contain %q, but got: %s", tc.expectedLogMsg, logOutput)
+			}
+
+			// Verify expectation matches reality
+			if tc.expectResize {
+				if strings.Contains(logOutput, "no changes needed") {
+					t.Error("Expected resize but log says no changes needed")
+				}
+			} else {
+				if strings.Contains(logOutput, "resized but format") {
+					t.Error("Expected no resize but log says image was resized")
+				}
 			}
 		})
 	}

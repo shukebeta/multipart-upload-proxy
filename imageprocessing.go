@@ -24,6 +24,7 @@ type ImageProcessingSettings struct {
 type ImageProcessingResult struct {
 	ProcessedData   []byte
 	WasCompressed   bool
+	WasResized      bool
 	NewDimensions   ImageSize
 	ProcessingError error
 }
@@ -50,6 +51,8 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 			return &ImageProcessingResult{
 				ProcessedData:   originalData,
 				WasCompressed:   false,
+				WasResized:      false,
+				NewDimensions:   ImageSize{},
 				ProcessingError: nil,
 			}, nil
 		}
@@ -61,6 +64,8 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 		return &ImageProcessingResult{
 			ProcessedData:   originalData,
 			WasCompressed:   false,
+			WasResized:      false,
+			NewDimensions:   ImageSize{},
 			ProcessingError: err,
 		}, err
 	}
@@ -71,6 +76,8 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 		return &ImageProcessingResult{
 			ProcessedData:   rotatedData,
 			WasCompressed:   false,
+			WasResized:      false,
+			NewDimensions:   ImageSize{},
 			ProcessingError: err,
 		}, err
 	}
@@ -90,6 +97,7 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 			return &ImageProcessingResult{
 				ProcessedData:   rotatedData,
 				WasCompressed:   false,
+				WasResized:      false,
 				NewDimensions:   ImageSize{Width: oldImageSize.Width, Height: oldImageSize.Height},
 				ProcessingError: nil,
 			}, nil
@@ -106,6 +114,7 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 			return &ImageProcessingResult{
 				ProcessedData:   rotatedData,
 				WasCompressed:   false,
+				WasResized:      false,
 				NewDimensions:   ImageSize{Width: oldImageSize.Width, Height: oldImageSize.Height},
 				ProcessingError: err,
 			}, err
@@ -114,6 +123,7 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 		return &ImageProcessingResult{
 			ProcessedData: processedData,
 			WasCompressed: false, // We didn't change format, just resized
+			WasResized:    true,  // We did resize the image
 			NewDimensions: newDimensions,
 		}, nil
 	}
@@ -150,12 +160,14 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 			ProcessedData:   rotatedData,  // Return rotated data even if processing fails
 			WasCompressed:   false,
 			NewDimensions:   ImageSize{Width: oldImageSize.Width, Height: oldImageSize.Height},
+			WasResized:      false,
 			ProcessingError: err,
 		}, err
 	}
 
 	// Only use converted data if it's actually smaller (the whole point of conversion is optimization)
 	wasCompressed := len(processedData) < len(rotatedData)
+	wasResized := newDimensions.Width != oldImageSize.Width || newDimensions.Height != oldImageSize.Height
 	
 	var finalData []byte
 	if wasCompressed {
@@ -169,6 +181,7 @@ func processImageWithStrategy(originalData []byte, settings ImageProcessingSetti
 	return &ImageProcessingResult{
 		ProcessedData: finalData,
 		WasCompressed: wasCompressed,
+		WasResized:    wasResized,
 		NewDimensions: newDimensions,
 	}, nil
 }

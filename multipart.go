@@ -44,15 +44,18 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request, cfg *Config) (str
 	// Track processing results
 	var wasImageProcessed bool
 	var actuallyCompressed bool
+	var wasResized bool
 
 	if err == nil {
 		wasImageProcessed = true
 		actuallyCompressed = result.WasCompressed
+		wasResized = result.WasResized
 		byteContainer = result.ProcessedData
 	} else {
 		log.Printf("Image processing error: %v", err)
 		wasImageProcessed = false
 		actuallyCompressed = false
+		wasResized = false
 		// byteContainer remains original data
 	}
 
@@ -109,7 +112,11 @@ func reformatMultipart(w http.ResponseWriter, r *http.Request, cfg *Config) (str
 			finalMimeType = DEFAULT_MIME_TYPE
 		}
 		if convertFormat == "" {
-			log.Printf("Image resized but format conversion disabled: %s (%s)", finalFilename, finalMimeType)
+			if wasResized {
+				log.Printf("Image resized but format conversion disabled: %s (%s)", finalFilename, finalMimeType)
+			} else {
+				log.Printf("Image processed but no changes needed: %s (%s)", finalFilename, finalMimeType)
+			}
 		} else {
 			log.Printf("Image processed but original kept (better compression): %s (%s)", finalFilename, finalMimeType)
 		}
