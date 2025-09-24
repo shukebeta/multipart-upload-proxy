@@ -73,39 +73,60 @@ func TestCalculateBoundingBoxResize(t *testing.T) {
 		expected  ImageSize
 	}{
 		{
-			name:      "No resize needed - within bounds",
+			name:      "No resize needed - landscape within bounds",
 			original:  ImageSize{Width: 500, Height: 300},
 			maxWidth:  800,
 			maxHeight: 600,
 			expected:  ImageSize{Width: 500, Height: 300},
 		},
 		{
-			name:      "Resize by width constraint",
+			name:      "No resize needed - portrait within bounds",
+			original:  ImageSize{Width: 300, Height: 500},
+			maxWidth:  800,
+			maxHeight: 600,
+			expected:  ImageSize{Width: 300, Height: 500},
+		},
+		{
+			name:      "Landscape: resize by width constraint",
 			original:  ImageSize{Width: 1600, Height: 800},
 			maxWidth:  800,
 			maxHeight: 1000,
 			expected:  ImageSize{Width: 800, Height: 400},
 		},
 		{
-			name:      "Resize by height constraint",
+			name:      "Portrait: orientation-aware resize (swapped limits)",
 			original:  ImageSize{Width: 800, Height: 1200},
 			maxWidth:  1000,
 			maxHeight: 600,
-			expected:  ImageSize{Width: 400, Height: 600},
+			expected:  ImageSize{Width: 600, Height: 900},
 		},
 		{
-			name:      "Resize by both constraints - width tighter",
+			name:      "Landscape: both constraints - width tighter",
 			original:  ImageSize{Width: 2000, Height: 1000},
 			maxWidth:  400,
 			maxHeight: 800,
 			expected:  ImageSize{Width: 400, Height: 200},
 		},
 		{
-			name:      "Resize by both constraints - height tighter",
+			name:      "Portrait: orientation-aware with swapped constraints",
 			original:  ImageSize{Width: 1000, Height: 2000},
 			maxWidth:  800,
 			maxHeight: 400,
-			expected:  ImageSize{Width: 200, Height: 400},
+			expected:  ImageSize{Width: 400, Height: 800},
+		},
+		{
+			name:      "Real example: 3000x2000 landscape with 1920x1080 config",
+			original:  ImageSize{Width: 3000, Height: 2000},
+			maxWidth:  1920,
+			maxHeight: 1080,
+			expected:  ImageSize{Width: 1620, Height: 1080},
+		},
+		{
+			name:      "Real example: 2000x3000 portrait with 1920x1080 config",
+			original:  ImageSize{Width: 2000, Height: 3000},
+			maxWidth:  1920,
+			maxHeight: 1080,
+			expected:  ImageSize{Width: 1080, Height: 1620},
 		},
 	}
 

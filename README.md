@@ -32,7 +32,17 @@ If you use existing software, it might be needed to intercept incoming connectio
 The proxy supports two different image resizing strategies:
 
 ### Bounding Box Strategy (Default)
-When `IMG_MAX_NARROW_SIDE` is not set (or set to 0), the proxy uses the traditional bounding box approach where both width and height must fit within the specified `IMG_MAX_WIDTH` and `IMG_MAX_HEIGHT` limits.
+When `IMG_MAX_NARROW_SIDE` is not set (or set to 0), the proxy uses an intelligent orientation-aware bounding box approach:
+
+**Orientation-Aware Resizing:**
+- **Landscape images** (width ≥ height): Use `IMG_MAX_WIDTH` × `IMG_MAX_HEIGHT` limits directly
+- **Portrait images** (height > width): Automatically swap to `IMG_MAX_HEIGHT` × `IMG_MAX_WIDTH` limits
+
+**Examples with default 1920×1080 configuration:**
+- 3000×2000 landscape → 1620×1080 (fits within 1920×1080 box)
+- 2000×3000 portrait → 1080×1620 (fits within 1080×1920 swapped box)
+
+This ensures optimal sizing for both orientations without manual configuration.
 
 ### Narrow Side Strategy
 When `IMG_MAX_NARROW_SIDE` is set to a value greater than 0, the proxy constrains only the narrow side (shorter dimension) of the image to the specified limit. The wide side can be larger, which is useful for panoramic images or when you want to preserve more detail in one dimension.
