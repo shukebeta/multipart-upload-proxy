@@ -91,7 +91,11 @@ func TestCalculateBoundingBoxResize(t *testing.T) {
 			original:  ImageSize{Width: 1600, Height: 800},
 			maxWidth:  800,
 			maxHeight: 1000,
-			expected:  ImageSize{Width: 800, Height: 400},
+			// Config 800x1000 interpreted as: short edge ≤ 800, long edge ≤ 1000
+			// Landscape image → needs long×short boundary box = 1000×800
+			// Scale: min(1000/1600, 800/800) = min(0.625, 1.0) = 0.625
+			// Result: 1600×0.625 = 1000, 800×0.625 = 500
+			expected:  ImageSize{Width: 1000, Height: 500},
 		},
 		{
 			name:      "Portrait: orientation-aware resize (swapped limits)",
@@ -105,7 +109,11 @@ func TestCalculateBoundingBoxResize(t *testing.T) {
 			original:  ImageSize{Width: 2000, Height: 1000},
 			maxWidth:  400,
 			maxHeight: 800,
-			expected:  ImageSize{Width: 400, Height: 200},
+			// Config 400x800 interpreted as: short edge ≤ 400, long edge ≤ 800
+			// Landscape image → needs long×short boundary box = 800×400
+			// Scale: min(800/2000, 400/1000) = min(0.4, 0.4) = 0.4
+			// Result: 2000×0.4 = 800, 1000×0.4 = 400
+			expected:  ImageSize{Width: 800, Height: 400},
 		},
 		{
 			name:      "Portrait: orientation-aware with swapped constraints",
@@ -127,6 +135,20 @@ func TestCalculateBoundingBoxResize(t *testing.T) {
 			maxWidth:  1920,
 			maxHeight: 1080,
 			expected:  ImageSize{Width: 1080, Height: 1620},
+		},
+		{
+			name:      "Portrait config: 2000x3000 portrait with 1080x1920 config",
+			original:  ImageSize{Width: 2000, Height: 3000},
+			maxWidth:  1080,
+			maxHeight: 1920,
+			expected:  ImageSize{Width: 1080, Height: 1620},
+		},
+		{
+			name:      "Portrait config: 3000x2000 landscape with 1080x1920 config",
+			original:  ImageSize{Width: 3000, Height: 2000},
+			maxWidth:  1080,
+			maxHeight: 1920,
+			expected:  ImageSize{Width: 1620, Height: 1080},
 		},
 	}
 
@@ -157,7 +179,11 @@ func TestCalculateResizeDimensions(t *testing.T) {
 			name:     "Use bounding box strategy - no narrow side set",
 			original: ImageSize{Width: 1200, Height: 800},
 			settings: createImageProcessingSettings(600, 1000, 0, 80, 85, ""), // MaxNarrowSide=0 means not set
-			expected: ImageSize{Width: 600, Height: 400},
+			// Config 600x1000 interpreted as: short edge ≤ 600, long edge ≤ 1000
+			// Landscape image 1200x800 → needs long×short boundary box = 1000×600
+			// Scale: min(1000/1200, 600/800) = min(0.833, 0.75) = 0.75
+			// Result: 1200×0.75 = 900, 800×0.75 = 600
+			expected: ImageSize{Width: 900, Height: 600},
 		},
 		{
 			name:     "Narrow side strategy takes precedence",
