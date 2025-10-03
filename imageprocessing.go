@@ -228,21 +228,31 @@ func calculateNarrowSideResize(original ImageSize, maxNarrowSide int) ImageSize 
 }
 
 // calculateBoundingBoxResize calculates new dimensions based on bounding box constraints
-// Uses orientation-aware logic: ensures boundary box orientation matches image orientation
+// Uses orientation-aware logic: interprets config as long/short edge limits,
+// then applies them based on image orientation
 func calculateBoundingBoxResize(original ImageSize, maxWidth, maxHeight int) ImageSize {
+	// Interpret config as long edge and short edge limits (orientation-agnostic)
+	// Note: maxWidth/maxHeight are legacy parameter names; semantically they represent
+	// edge limits that should be applied based on image orientation, not literal width/height
+	configLongEdge := maxWidth
+	configShortEdge := maxHeight
+	if maxHeight > maxWidth {
+		configLongEdge = maxHeight
+		configShortEdge = maxWidth
+	}
+
+	// Apply limits based on image orientation
 	var effectiveMaxWidth, effectiveMaxHeight int
-
 	isLandscape := original.Width >= original.Height
-	configIsLandscape := maxWidth >= maxHeight
 
-	if isLandscape == configIsLandscape {
-		// Image and config orientations match: use as-is
-		effectiveMaxWidth = maxWidth
-		effectiveMaxHeight = maxHeight
+	if isLandscape {
+		// Landscape: long edge constrains width, short edge constrains height
+		effectiveMaxWidth = configLongEdge
+		effectiveMaxHeight = configShortEdge
 	} else {
-		// Image and config orientations differ: swap to match image orientation
-		effectiveMaxWidth = maxHeight
-		effectiveMaxHeight = maxWidth
+		// Portrait: short edge constrains width, long edge constrains height
+		effectiveMaxWidth = configShortEdge
+		effectiveMaxHeight = configLongEdge
 	}
 
 	if original.Width <= effectiveMaxWidth && original.Height <= effectiveMaxHeight {
